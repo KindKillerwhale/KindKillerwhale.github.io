@@ -2,9 +2,9 @@
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
     <title>kind_killerwhale</title>
-    <link>http://localhost:13188/</link>
+    <link>http://localhost:14098/</link>
     <description>Recent content on kind_killerwhale</description>
     <generator>Hugo -- gohugo.io</generator>
-      <language>en-us</language><atom:link href="http://localhost:13188/index.xml" rel="self" type="application/rss+xml" />
+      <language>en-us</language><atom:link href="http://localhost:14098/index.xml" rel="self" type="application/rss+xml" />
   </channel>
 </rss>
