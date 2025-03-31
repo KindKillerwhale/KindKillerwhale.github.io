@@ -1,11 +1,10 @@
 <?xml version="1.0" encoding="utf-8" standalone="yes"?>
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
-    <title>Home on kind_killerwhale</title>
-    <link>http://localhost:11706/</link>
-    <description>Recent content in Home on kind_killerwhale</description>
+    <title>kind_killerwhale</title>
+    <link>http://localhost:13188/</link>
+    <description>Recent content on kind_killerwhale</description>
     <generator>Hugo -- gohugo.io</generator>
-      <language>en-us</language>
-      <lastBuildDate>Mon, 31 Mar 2025 00:00:00 +0000</lastBuildDate><atom:link href="http://localhost:11706/index.xml" rel="self" type="application/rss+xml" />
+      <language>en-us</language><atom:link href="http://localhost:13188/index.xml" rel="self" type="application/rss+xml" />
   </channel>
 </rss>
