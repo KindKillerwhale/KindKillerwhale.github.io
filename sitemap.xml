@@ -2,14 +2,11 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
   xmlns:xhtml="http://www.w3.org/1999/xhtml">
   <url>
-    <loc>https://rpc.kr/</loc>
-    <lastmod>2025-03-31T16:29:50+09:00</lastmod>
+    <loc>http://localhost:11706/</loc>
+    <lastmod>2025-03-31T00:00:00+00:00</lastmod>
   </url><url>
-    <loc>https://rpc.kr/post/</loc>
-    <lastmod>2025-03-31T16:29:50+09:00</lastmod>
+    <loc>http://localhost:11706/categories/</loc>
   </url><url>
-    <loc>https://rpc.kr/categories/</loc>
-  </url><url>
-    <loc>https://rpc.kr/tags/</loc>
+    <loc>http://localhost:11706/tags/</loc>
   </url>
 </urlset>
