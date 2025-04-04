@@ -5,6 +5,34 @@
     <link>https://rpc.kr/tags/</link>
     <description>Recent content in Tags on kind_killerwhale</description>
     <generator>Hugo -- gohugo.io</generator>
-      <language>en-us</language><atom:link href="https://rpc.kr/tags/index.xml" rel="self" type="application/rss+xml" />
+      <language>en-us</language>
+      <lastBuildDate>Fri, 04 Apr 2025 00:00:00 +0000</lastBuildDate><atom:link href="https://rpc.kr/tags/index.xml" rel="self" type="application/rss+xml" />
+    <item>
+      <title>Fuzzer</title>
+      <link>https://rpc.kr/tags/fuzzer/</link>
+      <pubDate>Fri, 04 Apr 2025 00:00:00 +0000</pubDate>
+
+      <guid>https://rpc.kr/tags/fuzzer/</guid>
+      <description></description>
+      <content></content>
+    </item>
+    <item>
+      <title>Fuzzilli</title>
+      <link>https://rpc.kr/tags/fuzzilli/</link>
+      <pubDate>Fri, 04 Apr 2025 00:00:00 +0000</pubDate>
+
+      <guid>https://rpc.kr/tags/fuzzilli/</guid>
+      <description></description>
+      <content></content>
+    </item>
+    <item>
+      <title>IR</title>
+      <link>https://rpc.kr/tags/ir/</link>
+      <pubDate>Fri, 04 Apr 2025 00:00:00 +0000</pubDate>
+
+      <guid>https://rpc.kr/tags/ir/</guid>
+      <description></description>
+      <content></content>
+    </item>
   </channel>
 </rss>
