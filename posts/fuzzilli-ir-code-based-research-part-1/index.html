@@ -1,0 +1,1706 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+<title>Fuzzilli IR Code Based Research Part 1 ( Analyzer.swift, Blocks.swift, Context.swift ) :: kind_killerwhale</title>
+<meta http-equiv="content-type" content="text/html; charset=utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="description" content="A deep dive into the core IR components of Fuzzilli, focusing on Analyzer.swift, Blocks.swift, and Context.swift. This post kicks off a series exploring the internal structure of Fuzzilli&#39;s IR.
+" />
+<meta name="keywords" content="" />
+<meta name="robots" content="noodp" />
+<link rel="canonical" href="https://rpc.kr/posts/fuzzilli-ir-code-based-research-part-1/" />
+<meta property="og:locale" content="en" />
+<meta property="og:title" content="Fuzzilli IR Code Based Research Part 1 ( Analyzer.swift, Blocks.swift, Context.swift ) :: kind_killerwhale" />
+<meta property="og:description" content="A deep dive into the core IR components of Fuzzilli, focusing on Analyzer.swift, Blocks.swift, and Context.swift. This post kicks off a series exploring the internal structure of Fuzzilli&#39;s IR.
+" />
+  <meta property="og:type" content="article" />
+    <meta property="article:published_time" content="2025-04-04 00:00:00 &#43;0000 UTC" />
+    <meta property="article:modified_time" content="2025-04-04 00:00:00 UTC" />
+  <meta property="article:author" content="DongHyeon Hwang ( @kind_killerwhale )" />
+<meta property="og:url" content="https://rpc.kr/posts/fuzzilli-ir-code-based-research-part-1/" />
+<meta property="og:site_name" content="kind_killerwhale" />
+<meta property="og:image" content="" />
+<meta property="og:image:width" content="2048" />
+<meta property="og:image:height" content="1024" />
+<link rel="shortcut icon" href="" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link
+  href="https://fonts.googleapis.com/css2?family=Fira+Sans:ital,wght@0,300;0,400;0,500;1,300;1,400;1,500&family=Roboto+Slab:wght@300;400;500&family=Ubuntu+Mono:ital@0;1&display=swap"
+  rel="stylesheet"
+/>
+<link href="/posts/fuzzilli-ir-code-based-research-part-1/" rel="alternate" type="application/rss+xml" title="kind_killerwhale" />
+<link rel="stylesheet" href="https://rpc.kr/styles.4fd90a6505ea3851d8e267e6d7bae379bd7eec066a38333cb916e838598e51aa.css" integrity="sha256-T9kKZQXqOFHY4mfm17rjeb1&#43;7AZqODM8uRboOFmOUao=" />
+</head>
+
+  <body>
+    <div class="theme-container">
+      <div class="container center">
+        <header class="site-header">
+<nav class="navbar">
+  <div class="navbar__first">
+    <ul class="navbar__list borders">
+      <li><a href="https://rpc.kr/">Home</a></li>
+      <li>
+        <button class="theme-toggle transparent"><svg class="theme-toggler" width="24" height="24" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <path
+    d="M22 41C32.4934 41 41 32.4934 41 22C41 11.5066 32.4934 3 22
+  3C11.5066 3 3 11.5066 3 22C3 32.4934 11.5066 41 22 41ZM7 22C7
+  13.7157 13.7157 7 22 7V37C13.7157 37 7 30.2843 7 22Z"
+  />
+</svg>
+</button>
+      </li>
+    </ul>
+  </div>
+  <div class="navbar__separator"></div>
+    <div class="navbar__last">
+      <ul class="navbar__list borders menu--desktop">
+            <li><a href="/about/">About</a></li>
+            <li><a href="/posts/">Posts</a></li></ul>
+      <ul class="menu menu--mobile">
+        <li class="menu-trigger">===</li>
+        <li>
+          <ul class="menu-dropdown">
+                <li><a href="/about/">About</a></li>
+                <li><a href="/posts/">Posts</a></li></ul>
+        </li>
+      </ul>
+    </div>
+</nav>
+</header>
+        <main class="site-main"><article class="post">
+    <header class="post-header">
+        <h1 class="post-title"><a href="https://rpc.kr/posts/fuzzilli-ir-code-based-research-part-1/">Fuzzilli IR Code Based Research Part 1 ( Analyzer.swift, Blocks.swift, Context.swift )</a></h1>
+        <div class="post-meta">
+            <time pubdate datetime="2025-04-04 00:00:00 UTC">
+              Published on
+              2025-04-04 00:00:00 UTC
+            </time>
+            <span>by DongHyeon Hwang ( @kind_killerwhale )</span>
+            <time pubdate datetime="2025-04-04 00:00:00 UTC"> last modified 2025-04-04 00:00:00 UTC. </time>
+        </div>
+        <p class="post-tags">Tags:&nbsp;#<a href="https://rpc.kr/tags/fuzzilli/">Fuzzilli</a>&nbsp;#<a href="https://rpc.kr/tags/ir/">IR</a>&nbsp;#<a href="https://rpc.kr/tags/fuzzer/">Fuzzer</a>&nbsp;</p>
+        <p class="post-description">A deep dive into the core IR components of Fuzzilli, focusing on Analyzer.swift, Blocks.swift, and Context.swift. This post kicks off a series exploring the internal structure of Fuzzilli&#39;s IR.
+</p>
+    </header>
+      <div class="post-content">
+        <p> </p>
+<p>This is the first post in a series that deeply analyzes Fuzzilli’s IR codebase.
+In this post, as indicated by the title, we’ll take a closer look at <code>Analyzer.swift</code>, <code>Blocks.swift</code>, and <code>Context.swift</code>.</p>
+
+<h1 id="analzerswift">
+  Analzer.swift
+  <a href="#analzerswift" class="hanchor" ariaLabel="Anchor"></a>
+</h1>
+<hr>
+
+<div class="highlight-wrapper">
+  <div class="highlight-toolbar">
+    <span class="item">
+      <span class="label">Lang:</span>
+      <span class="name">swift</span>
+    </span>
+
+
+    <button class="item right outline brighter hide js-btn-copy-code">Copy</button>
+  </div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-swift" data-lang="swift"><span style="display:flex;"><span><span style="color:#75715e">// Copyright 2019 Google LLC</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">//</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// Licensed under the Apache License, Version 2.0 (the &#34;License&#34;);</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// you may not use this file except in compliance with the License.</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// You may obtain a copy of the License at</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">//</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// https://www.apache.org/licenses/LICENSE-2.0</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">//</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// Unless required by applicable law or agreed to in writing, software</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// distributed under the License is distributed on an &#34;AS IS&#34; BASIS,</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// See the License for the specific language governing permissions and</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// limitations under the License.</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">protocol</span> <span style="color:#a6e22e">Analyzer</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">/// Analyzes the next instruction of a program.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">///</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">/// The caller must guarantee that the instructions are given to this method in the correct order.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">mutating</span> <span style="color:#66d9ef">func</span> <span style="color:#a6e22e">analyze</span>(<span style="color:#66d9ef">_</span> instr: Instruction)
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">extension</span> <span style="color:#a6e22e">Analyzer</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">/// Analyze the provided program.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">mutating</span> <span style="color:#66d9ef">func</span> <span style="color:#a6e22e">analyze</span>(<span style="color:#66d9ef">_</span> program: Program) {
+</span></span><span style="display:flex;"><span>        analyze(program.code)
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">mutating</span> <span style="color:#66d9ef">func</span> <span style="color:#a6e22e">analyze</span>(<span style="color:#66d9ef">_</span> code: Code) {
+</span></span><span style="display:flex;"><span>        assert(code.isStaticallyValid())
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">for</span> instr <span style="color:#66d9ef">in</span> code {
+</span></span><span style="display:flex;"><span>            analyze(instr)
+</span></span><span style="display:flex;"><span>        }
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">/// Determines definitions, assignments, and uses of variables.</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">struct</span> <span style="color:#a6e22e">DefUseAnalyzer</span>: Analyzer {
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">private</span> <span style="color:#66d9ef">var</span> assignments = VariableMap<span style="color:#f92672">&lt;</span>[Int]<span style="color:#f92672">&gt;</span>()
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">private</span> <span style="color:#66d9ef">var</span> uses = VariableMap<span style="color:#f92672">&lt;</span>[Int]<span style="color:#f92672">&gt;</span>()
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">private</span> <span style="color:#66d9ef">let</span> code: Code
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">private</span> <span style="color:#66d9ef">var</span> analysisDone = <span style="color:#66d9ef">false</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">init</span>(<span style="color:#66d9ef">for</span> program: Program) {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">self</span>.code = program.code
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">mutating</span> <span style="color:#66d9ef">func</span> <span style="color:#a6e22e">finishAnalysis</span>() {
+</span></span><span style="display:flex;"><span>        analysisDone = <span style="color:#66d9ef">true</span>
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">mutating</span> <span style="color:#66d9ef">func</span> <span style="color:#a6e22e">analyze</span>() {
+</span></span><span style="display:flex;"><span>        analyze(code)
+</span></span><span style="display:flex;"><span>        finishAnalysis()
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">mutating</span> <span style="color:#66d9ef">func</span> <span style="color:#a6e22e">analyze</span>(<span style="color:#66d9ef">_</span> instr: Instruction) {
+</span></span><span style="display:flex;"><span>        assert(code[instr.index].op === instr.op)    <span style="color:#75715e">// Must be operating on the program passed in during construction</span>
+</span></span><span style="display:flex;"><span>        assert(<span style="color:#f92672">!</span>analysisDone)
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">for</span> v <span style="color:#66d9ef">in</span> instr.allOutputs {
+</span></span><span style="display:flex;"><span>            assignments[v] = [instr.index]
+</span></span><span style="display:flex;"><span>            uses[v] = []
+</span></span><span style="display:flex;"><span>        }
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">for</span> v <span style="color:#66d9ef">in</span> instr.inputs {
+</span></span><span style="display:flex;"><span>            assert(uses.contains(v))
+</span></span><span style="display:flex;"><span>            uses[v]?.append(instr.index)
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">if</span> instr.reassigns(v) {
+</span></span><span style="display:flex;"><span>                assignments[v]?.append(instr.index)
+</span></span><span style="display:flex;"><span>            }
+</span></span><span style="display:flex;"><span>        }
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">/// Returns the instruction that defines the given variable.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">func</span> <span style="color:#a6e22e">definition</span>(of variable: Variable) -&gt; Instruction {
+</span></span><span style="display:flex;"><span>        assert(assignments.contains(variable))
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> code[assignments[variable]<span style="color:#f92672">!</span>[<span style="color:#ae81ff">0</span>]]
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">/// Returns all instructions that assign the given variable, including its initial definition.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">func</span> <span style="color:#a6e22e">assignments</span>(of variable: Variable) -&gt; [Instruction] {
+</span></span><span style="display:flex;"><span>        assert(assignments.contains(variable))
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> assignments[variable]<span style="color:#f92672">!</span>.map({ code[$0] })
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">/// Returns the instructions using the given variable.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">func</span> <span style="color:#a6e22e">uses</span>(of variable: Variable) -&gt; [Instruction] {
+</span></span><span style="display:flex;"><span>        assert(uses.contains(variable))
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> uses[variable]<span style="color:#f92672">!</span>.map({ code[$0] })
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">/// Returns the indices of the instructions using the given variable.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">func</span> <span style="color:#a6e22e">assignmentIndices</span>(of variable: Variable) -&gt; [Int] {
+</span></span><span style="display:flex;"><span>        assert(uses.contains(variable))
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> assignments[variable]<span style="color:#f92672">!</span>
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">/// Returns the indices of the instructions using the given variable.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">func</span> <span style="color:#a6e22e">usesIndices</span>(of variable: Variable) -&gt; [Int] {
+</span></span><span style="display:flex;"><span>        assert(uses.contains(variable))
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> uses[variable]<span style="color:#f92672">!</span>
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">/// Returns the number of instructions using the given variable.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">func</span> <span style="color:#a6e22e">numAssignments</span>(of variable: Variable) -&gt; Int {
+</span></span><span style="display:flex;"><span>        assert(assignments.contains(variable))
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> assignments[variable]<span style="color:#f92672">!</span>.count
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">/// Returns the number of instructions using the given variable.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">func</span> <span style="color:#a6e22e">numUses</span>(of variable: Variable) -&gt; Int {
+</span></span><span style="display:flex;"><span>        assert(uses.contains(variable))
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> uses[variable]<span style="color:#f92672">!</span>.count
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">/// Keeps track of currently visible variables during program construction.</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">struct</span> <span style="color:#a6e22e">VariableAnalyzer</span>: Analyzer {
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">private</span>(<span style="color:#66d9ef">set</span>) <span style="color:#66d9ef">var</span> visibleVariables = [Variable]()
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">private</span>(<span style="color:#66d9ef">set</span>) <span style="color:#66d9ef">var</span> scopes = Stack&lt;Int&gt;([<span style="color:#ae81ff">0</span>])
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">/// Track the current maximum branch depth. Note that some wasm blocks are not valid branch targets</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// (catch, catch_all) and therefore don&#39;t contribute to the branch depth.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">private</span>(<span style="color:#66d9ef">set</span>) <span style="color:#66d9ef">var</span> wasmBranchDepth = <span style="color:#ae81ff">0</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">mutating</span> <span style="color:#66d9ef">func</span> <span style="color:#a6e22e">analyze</span>(<span style="color:#66d9ef">_</span> instr: Instruction) {
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e">// Scope management (1).</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">if</span> instr.isBlockEnd {
+</span></span><span style="display:flex;"><span>            assert(scopes.count <span style="color:#f92672">&gt;</span> <span style="color:#ae81ff">0</span>, <span style="color:#e6db74">&#34;Trying to end a scope that was never started&#34;</span>)
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">let</span> variablesInClosedScope = scopes.pop()
+</span></span><span style="display:flex;"><span>            visibleVariables.removeLast(variablesInClosedScope)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">if</span> instr.op <span style="color:#66d9ef">is</span> WasmOperation {
+</span></span><span style="display:flex;"><span>                assert(wasmBranchDepth <span style="color:#f92672">&gt;</span> <span style="color:#ae81ff">0</span>)
+</span></span><span style="display:flex;"><span>                wasmBranchDepth <span style="color:#f92672">-=</span> <span style="color:#ae81ff">1</span>
+</span></span><span style="display:flex;"><span>            }
+</span></span><span style="display:flex;"><span>        }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        scopes.top <span style="color:#f92672">+=</span> instr.numOutputs
+</span></span><span style="display:flex;"><span>        visibleVariables.append(contentsOf: instr.outputs)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e">// Scope management (2). Happens here since e.g. function definitions create a variable in the outer scope.</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e">// This code has to be somewhat careful since e.g. BeginElse both ends and begins a variable scope.</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">if</span> instr.isBlockStart {
+</span></span><span style="display:flex;"><span>            scopes.push(<span style="color:#ae81ff">0</span>)
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">if</span> instr.op <span style="color:#66d9ef">is</span> WasmOperation {
+</span></span><span style="display:flex;"><span>                wasmBranchDepth <span style="color:#f92672">+=</span> <span style="color:#ae81ff">1</span>
+</span></span><span style="display:flex;"><span>            }
+</span></span><span style="display:flex;"><span>        }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        scopes.top <span style="color:#f92672">+=</span> instr.numInnerOutputs
+</span></span><span style="display:flex;"><span>        visibleVariables.append(contentsOf: instr.innerOutputs)
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">/// Keeps track of the current context during program construction.</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">struct</span> <span style="color:#a6e22e">ContextAnalyzer</span>: Analyzer {
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">private</span> <span style="color:#66d9ef">var</span> contextStack = Stack([Context.javascript])
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">var</span> context: Context {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> contextStack.top
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">mutating</span> <span style="color:#66d9ef">func</span> <span style="color:#a6e22e">analyze</span>(<span style="color:#66d9ef">_</span> instr: Instruction) {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">if</span> instr.isBlockEnd {
+</span></span><span style="display:flex;"><span>            contextStack.pop()
+</span></span><span style="display:flex;"><span>        }
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">if</span> instr.isBlockStart {
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">var</span> newContext = instr.op.contextOpened
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">if</span> instr.propagatesSurroundingContext {
+</span></span><span style="display:flex;"><span>                newContext.formUnion(context)
+</span></span><span style="display:flex;"><span>            }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>            <span style="color:#75715e">// If we resume the context analysis, we currently take the second to last context.</span>
+</span></span><span style="display:flex;"><span>            <span style="color:#75715e">// This currently only works if we have a single layer of these instructions.</span>
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">if</span> instr.skipsSurroundingContext {
+</span></span><span style="display:flex;"><span>                assert(<span style="color:#f92672">!</span>instr.propagatesSurroundingContext)
+</span></span><span style="display:flex;"><span>                assert(contextStack.count <span style="color:#f92672">&gt;=</span> <span style="color:#ae81ff">2</span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>                <span style="color:#75715e">// Currently we only support context &#34;skipping&#34; for switch blocks. This logic may need to be refined if it is ever used for other constructs as well.</span>
+</span></span><span style="display:flex;"><span>                assert((contextStack.top.contains(.switchBlock) <span style="color:#f92672">&amp;&amp;</span> contextStack.top.subtracting(.switchBlock) == .empty))
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>                newContext.formUnion(contextStack.secondToTop)
+</span></span><span style="display:flex;"><span>            }
+</span></span><span style="display:flex;"><span>            
+</span></span><span style="display:flex;"><span>            <span style="color:#75715e">// If we are in a loop, we don&#39;t want to propagate the switch context and vice versa. Otherwise we couldn&#39;t determine which break operation to emit.</span>
+</span></span><span style="display:flex;"><span>            <span style="color:#75715e">// TODO Make this generic for similar logic cases as well. E.g. by using a instr.op.contextClosed list.</span>
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">if</span> (instr.op.contextOpened.contains(.switchBlock) <span style="color:#f92672">||</span> instr.op.contextOpened.contains(.switchCase)) {
+</span></span><span style="display:flex;"><span>                newContext.remove(.loop)
+</span></span><span style="display:flex;"><span>            } <span style="color:#66d9ef">else</span> <span style="color:#66d9ef">if</span> (instr.op.contextOpened.contains(.loop)) {
+</span></span><span style="display:flex;"><span>                newContext.remove(.switchBlock) 
+</span></span><span style="display:flex;"><span>                newContext.remove(.switchCase)
+</span></span><span style="display:flex;"><span>            }
+</span></span><span style="display:flex;"><span>            contextStack.push(newContext)
+</span></span><span style="display:flex;"><span>        }
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">/// Determines whether code after the current instruction is dead code (i.e. can never be executed).</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">struct</span> <span style="color:#a6e22e">DeadCodeAnalyzer</span>: Analyzer {
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">private</span> <span style="color:#66d9ef">var</span> depth = <span style="color:#ae81ff">0</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">var</span> currentlyInDeadCode: Bool {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> depth <span style="color:#f92672">!=</span> <span style="color:#ae81ff">0</span>
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">mutating</span> <span style="color:#66d9ef">func</span> <span style="color:#a6e22e">analyze</span>(<span style="color:#66d9ef">_</span> instr: Instruction) {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">if</span> instr.isBlockEnd <span style="color:#f92672">&amp;&amp;</span> currentlyInDeadCode {
+</span></span><span style="display:flex;"><span>            depth <span style="color:#f92672">-=</span> <span style="color:#ae81ff">1</span>
+</span></span><span style="display:flex;"><span>        }
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">if</span> instr.isBlockStart <span style="color:#f92672">&amp;&amp;</span> currentlyInDeadCode {
+</span></span><span style="display:flex;"><span>            depth <span style="color:#f92672">+=</span> <span style="color:#ae81ff">1</span>
+</span></span><span style="display:flex;"><span>        }
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">if</span> instr.isJump <span style="color:#f92672">&amp;&amp;</span> <span style="color:#f92672">!</span>currentlyInDeadCode {
+</span></span><span style="display:flex;"><span>            depth = <span style="color:#ae81ff">1</span>
+</span></span><span style="display:flex;"><span>        }
+</span></span><span style="display:flex;"><span>        assert(depth <span style="color:#f92672">&gt;=</span> <span style="color:#ae81ff">0</span>)
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>}</span></span></code></pre></div></div>
+<p> </p>
+
+<h2 id="1-analyzer-protocol">
+  1. Analyzer Protocol
+  <a href="#1-analyzer-protocol" class="hanchor" ariaLabel="Anchor"></a>
+</h2>
+
+<div class="highlight-wrapper">
+  <div class="highlight-toolbar">
+    <span class="item">
+      <span class="label">Lang:</span>
+      <span class="name">swift</span>
+    </span>
+
+
+    <button class="item right outline brighter hide js-btn-copy-code">Copy</button>
+  </div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-swift" data-lang="swift"><span style="display:flex;"><span><span style="color:#66d9ef">protocol</span> <span style="color:#a6e22e">Analyzer</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">/// Analyzes the next instruction of a program.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">///</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">/// The caller must guarantee that the instructions are given to this method in the correct order.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">mutating</span> <span style="color:#66d9ef">func</span> <span style="color:#a6e22e">analyze</span>(<span style="color:#66d9ef">_</span> instr: Instruction)
+</span></span><span style="display:flex;"><span>}</span></span></code></pre></div></div>
+<p><code>Analyzer</code> is a common interface that traverses FuzzIL code (such as instructions, programs, and code blocks) and performs specific analysis logic for each Instruction.</p>
+<p>It analyzes one Instruction at a time through the <code>analyze(_ instr: Instruction)</code> method.</p>
+<p> </p>
+
+<div class="highlight-wrapper">
+  <div class="highlight-toolbar">
+    <span class="item">
+      <span class="label">Lang:</span>
+      <span class="name">swift</span>
+    </span>
+
+
+    <button class="item right outline brighter hide js-btn-copy-code">Copy</button>
+  </div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-swift" data-lang="swift"><span style="display:flex;"><span><span style="color:#66d9ef">extension</span> <span style="color:#a6e22e">Analyzer</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">mutating</span> <span style="color:#66d9ef">func</span> <span style="color:#a6e22e">analyze</span>(<span style="color:#66d9ef">_</span> program: Program) {
+</span></span><span style="display:flex;"><span>        analyze(program.code)
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">mutating</span> <span style="color:#66d9ef">func</span> <span style="color:#a6e22e">analyze</span>(<span style="color:#66d9ef">_</span> code: Code) {
+</span></span><span style="display:flex;"><span>        assert(code.isStaticallyValid())
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">for</span> instr <span style="color:#66d9ef">in</span> code {
+</span></span><span style="display:flex;"><span>            analyze(instr)
+</span></span><span style="display:flex;"><span>        }
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>}</span></span></code></pre></div></div>
+<p>This is the default implementation (extension) of the <code>Analyzer</code> protocol.</p>
+<ul>
+<li>
+<p><code>analyze(program: Program)</code>: Traverses the entire program and calls analyze(_ code: Code) for each code block.</p>
+</li>
+<li>
+<p><code>analyze(_ code: Code)</code>: Iterates through all Instructions in the given code in order and performs analyze(_:) on each.</p>
+</li>
+<li>
+<p>During this process, it verifies the consistency of the code in advance using <code>assert(code.isStaticallyValid())</code>.</p>
+</li>
+</ul>
+<p> </p>
+<p>For any struct or class that conforms to the <code>Analyzer</code> protocol, only the method <code>func analyze(_ instr: Instruction)</code> needs to be implemented — the logic for traversing the entire program is automatically provided by this extension.</p>
+<p> </p>
+
+<h2 id="2-defuseanalzer">
+  2. DefUseAnalzer
+  <a href="#2-defuseanalzer" class="hanchor" ariaLabel="Anchor"></a>
+</h2>
+
+<div class="highlight-wrapper">
+  <div class="highlight-toolbar">
+    <span class="item">
+      <span class="label">Lang:</span>
+      <span class="name">swift</span>
+    </span>
+
+
+    <button class="item right outline brighter hide js-btn-copy-code">Copy</button>
+  </div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-swift" data-lang="swift"><span style="display:flex;"><span><span style="color:#66d9ef">struct</span> <span style="color:#a6e22e">DefUseAnalyzer</span>: Analyzer {
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">private</span> <span style="color:#66d9ef">var</span> assignments = VariableMap<span style="color:#f92672">&lt;</span>[Int]<span style="color:#f92672">&gt;</span>()
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">private</span> <span style="color:#66d9ef">var</span> uses = VariableMap<span style="color:#f92672">&lt;</span>[Int]<span style="color:#f92672">&gt;</span>()
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">private</span> <span style="color:#66d9ef">let</span> code: Code
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">private</span> <span style="color:#66d9ef">var</span> analysisDone = <span style="color:#66d9ef">false</span>
+</span></span><span style="display:flex;"><span>    ...
+</span></span><span style="display:flex;"><span>}</span></span></code></pre></div></div>
+<p><code>DefUseAnalyzer</code> tracks <strong>definitions</strong>, <strong>reassignments</strong>, and <strong>uses</strong> of <strong>variables</strong>.</p>
+<ul>
+<li>For example: An instruction like <code>v0 = LoadInt 42</code> marks the point where <code>v0</code> is &ldquo;defined&rdquo;, and any subsequent instructions that &ldquo;use&rdquo; <code>v0</code> as an input will be recorded as uses.</li>
+</ul>
+<p> </p>
+<p>Key fields include:</p>
+<p> </p>
+<ul>
+<li>
+<p><code>assignments</code></p>
+<ul>
+<li><code>A VariableMap&lt;[Int]&gt;</code> that stores <strong>a list of instruction indices where a specific variable is assigned</strong>.</li>
+<li>The first element represents the &ldquo;<strong>initial definition</strong>&rdquo;, and the rest indicate &ldquo;<strong>reassignments</strong>&rdquo;.</li>
+</ul>
+</li>
+<li>
+<p><code>uses</code></p>
+<ul>
+<li>A <code>VariableMap&lt;[Int]&gt;</code> that tracks the list of <strong>instruction indices where the variable is used as an input</strong>.</li>
+</ul>
+</li>
+<li>
+<p><code>code: Code</code></p>
+<ul>
+<li>The list of instructions to analyze.</li>
+<li>This <code>DefUseAnalyzer</code> is initialized with a specific <code>code</code> block from a <code>Program</code>, and the <code>Instruction</code> indices refer to this code.</li>
+</ul>
+</li>
+<li>
+<p><code>analysisDone</code></p>
+<ul>
+<li>A flag indicating whether the full analysis has been completed.</li>
+<li>Once analysis is done, further modifications or additional analysis are disallowed.</li>
+</ul>
+</li>
+</ul>
+<p> </p>
+
+<h2 id="analze-and-finishanalysis">
+  <code>analze()</code> and <code>finishAnalysis()</code>
+  <a href="#analze-and-finishanalysis" class="hanchor" ariaLabel="Anchor"></a>
+</h2>
+
+<div class="highlight-wrapper">
+  <div class="highlight-toolbar">
+    <span class="item">
+      <span class="label">Lang:</span>
+      <span class="name">swift</span>
+    </span>
+
+
+    <button class="item right outline brighter hide js-btn-copy-code">Copy</button>
+  </div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-swift" data-lang="swift"><span style="display:flex;"><span><span style="color:#66d9ef">mutating</span> <span style="color:#66d9ef">func</span> <span style="color:#a6e22e">finishAnalysis</span>() {
+</span></span><span style="display:flex;"><span>    analysisDone = <span style="color:#66d9ef">true</span>
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">mutating</span> <span style="color:#66d9ef">func</span> <span style="color:#a6e22e">analyze</span>() {
+</span></span><span style="display:flex;"><span>    analyze(code)
+</span></span><span style="display:flex;"><span>    finishAnalysis()
+</span></span><span style="display:flex;"><span>}</span></span></code></pre></div></div>
+<ul>
+<li>The <code>analyze()</code> function internally calls the default implementation of the <code>Analyzer</code> protocol (<code>analyze(code)</code>) and then finalizes the process with a call to <code>finishAnalysis()</code>.</li>
+<li>Once <code>finishAnalysis()</code> is called, it sets <code>analysisDone = true</code>, which protects the logic from any further changes after analysis has been completed.</li>
+</ul>
+<p> </p>
+
+<h2 id="analze_-instr-instruction">
+  <code>analze(_ instr: Instruction)</code>
+  <a href="#analze_-instr-instruction" class="hanchor" ariaLabel="Anchor"></a>
+</h2>
+
+<div class="highlight-wrapper">
+  <div class="highlight-toolbar">
+    <span class="item">
+      <span class="label">Lang:</span>
+      <span class="name">swift</span>
+    </span>
+
+
+    <button class="item right outline brighter hide js-btn-copy-code">Copy</button>
+  </div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-swift" data-lang="swift"><span style="display:flex;"><span><span style="color:#66d9ef">mutating</span> <span style="color:#66d9ef">func</span> <span style="color:#a6e22e">analyze</span>(<span style="color:#66d9ef">_</span> instr: Instruction) {
+</span></span><span style="display:flex;"><span>        assert(code[instr.index].op === instr.op)    <span style="color:#75715e">// Must be operating on the program passed in during construction</span>
+</span></span><span style="display:flex;"><span>        assert(<span style="color:#f92672">!</span>analysisDone)
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">for</span> v <span style="color:#66d9ef">in</span> instr.allOutputs {
+</span></span><span style="display:flex;"><span>            assignments[v] = [instr.index]
+</span></span><span style="display:flex;"><span>            uses[v] = []
+</span></span><span style="display:flex;"><span>        }
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">for</span> v <span style="color:#66d9ef">in</span> instr.inputs {
+</span></span><span style="display:flex;"><span>            assert(uses.contains(v))
+</span></span><span style="display:flex;"><span>            uses[v]?.append(instr.index)
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">if</span> instr.reassigns(v) {
+</span></span><span style="display:flex;"><span>                assignments[v]?.append(instr.index)
+</span></span><span style="display:flex;"><span>            }
+</span></span><span style="display:flex;"><span>        }
+</span></span><span style="display:flex;"><span>    }</span></span></code></pre></div></div>
+<ul>
+<li>
+<p><code>assert(code[instr.index].op === instr.op)</code></p>
+<ul>
+<li>Ensures that the currently analyzed <code>instr</code> is exactly the same as the instruction at the given index in <code>code</code> (i.e., the same object reference).</li>
+<li>This guarantees that the analysis is inspecting the exact instruction at that point in the code.</li>
+</ul>
+</li>
+<li>
+<p><code>assert(!analysisDone)</code></p>
+<ul>
+<li>Ensures that <code>analyze()</code> is not called again after the analysis is already finished.</li>
+</ul>
+</li>
+<li>
+<p><strong>Handling Output Variables (allOutputs)</strong>:</p>
+<ul>
+<li>If an instruction defines a new variable (<code>outputs</code>), then:
+<ul>
+<li>Its assignment list is initialized as <code>[instr.index]</code></li>
+<li>Its use list is initialized as an empty array <code>[]</code></li>
+</ul>
+</li>
+</ul>
+</li>
+<li>
+<p><strong>Handling Input Variables (inputs)</strong>:</p>
+<ul>
+<li>Each input variable <code>v</code> should already exist in <code>uses</code> (meaning it has been defined at least once before).</li>
+<li>Since the current instruction is using <code>v</code>, the instruction index is appended to <code>uses[v]</code>.</li>
+<li>If <code>instr.reassigns(v)</code> returns <code>true</code> (e.g., the variable is being reassigned in this instruction), then the instruction index is also appended to <code>assignments[v]</code>.</li>
+</ul>
+</li>
+</ul>
+<p> </p>
+<p>As a result of this logic, for each variable <code>v</code>:</p>
+<ul>
+<li>The first element in <code>assignments[v]</code> indicates when it was first defined.</li>
+<li>Any further elements indicate reassignments.</li>
+<li>All elements in <code>uses[v]</code> record when it was used.</li>
+</ul>
+<p> </p>
+
+<h2 id="lookup-methods">
+  Lookup Methods
+  <a href="#lookup-methods" class="hanchor" ariaLabel="Anchor"></a>
+</h2>
+
+<div class="highlight-wrapper">
+  <div class="highlight-toolbar">
+    <span class="item">
+      <span class="label">Lang:</span>
+      <span class="name">swift</span>
+    </span>
+
+
+    <button class="item right outline brighter hide js-btn-copy-code">Copy</button>
+  </div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-swift" data-lang="swift"><span style="display:flex;"><span><span style="color:#66d9ef">func</span> <span style="color:#a6e22e">definition</span>(of variable: Variable) -&gt; Instruction { ... }
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">func</span> <span style="color:#a6e22e">assignments</span>(of variable: Variable) -&gt; [Instruction] { ... }
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">func</span> <span style="color:#a6e22e">uses</span>(of variable: Variable) -&gt; [Instruction] { ... }
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">func</span> <span style="color:#a6e22e">assignmentIndices</span>(of variable: Variable) -&gt; [Int] { ... }
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">func</span> <span style="color:#a6e22e">usesIndices</span>(of variable: Variable) -&gt; [Int] { ... }
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">func</span> <span style="color:#a6e22e">numAssignments</span>(of variable: Variable) -&gt; Int { ... }
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">func</span> <span style="color:#a6e22e">numUses</span>(of variable: Variable) -&gt; Int { ... }</span></span></code></pre></div></div>
+<ul>
+<li>
+<p>APIs that help easily find &ldquo;which instruction defined a variable&rdquo; based on definition/assignment/use information such as:</p>
+<ul>
+<li>“<strong>Where was a variable defined?</strong>”</li>
+<li>“<strong>Which instruction used or reassigned this variable?</strong>”</li>
+</ul>
+</li>
+<li>
+<p>Internally implemented by retrieving an index array using <code>assignments[variable]!</code> or <code>uses[variable]!</code>, and returning <code>code[...]</code> through that index.</p>
+</li>
+</ul>
+<p> </p>
+
+<h2 id="3-variableanalyzer">
+  3. VariableAnalyzer
+  <a href="#3-variableanalyzer" class="hanchor" ariaLabel="Anchor"></a>
+</h2>
+
+<div class="highlight-wrapper">
+  <div class="highlight-toolbar">
+    <span class="item">
+      <span class="label">Lang:</span>
+      <span class="name">swift</span>
+    </span>
+
+
+    <button class="item right outline brighter hide js-btn-copy-code">Copy</button>
+  </div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-swift" data-lang="swift"><span style="display:flex;"><span><span style="color:#66d9ef">struct</span> <span style="color:#a6e22e">VariableAnalyzer</span>: Analyzer {
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">private</span>(<span style="color:#66d9ef">set</span>) <span style="color:#66d9ef">var</span> visibleVariables = [Variable]()
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">private</span>(<span style="color:#66d9ef">set</span>) <span style="color:#66d9ef">var</span> scopes = Stack&lt;Int&gt;([<span style="color:#ae81ff">0</span>])
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">private</span>(<span style="color:#66d9ef">set</span>) <span style="color:#66d9ef">var</span> wasmBranchDepth = <span style="color:#ae81ff">0</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">mutating</span> <span style="color:#66d9ef">func</span> <span style="color:#a6e22e">analyze</span>(<span style="color:#66d9ef">_</span> instr: Instruction) { ... }
+</span></span><span style="display:flex;"><span>}</span></span></code></pre></div></div>
+<ul>
+<li>Tracks &ldquo;<strong>which variables are visible in the current scope</strong>&rdquo;, and how variables are arranged based on block-level structures (e.g., start/end of control structures).</li>
+<li>FuzzIL includes <strong>block-level operations</strong> such as <code>BeginIf</code>/<code>EndIf</code>, and variables like <code>innerOutputs</code> may only be valid within certain blocks.</li>
+</ul>
+<p> </p>
+<p>The fields are as follows:</p>
+<p> </p>
+<ul>
+<li>
+<p><code>visibleVariables</code></p>
+<ul>
+<li>A list of variables that are <strong>currently alive in the scope</strong></li>
+<li>When a scope ends (<code>isBlockEnd</code>), variables are removed from this list</li>
+</ul>
+</li>
+<li>
+<p><code>scopes</code></p>
+<ul>
+<li>A <strong>stack structure</strong> (<code>Stack&lt;Int&gt;</code>) that tracks how many nested scopes are active, and how many variables are created in each scope</li>
+<li>Example: push a new scope at <code>BeginIf</code>, and pop it at <code>EndIf</code>.</li>
+</ul>
+</li>
+<li>
+<p><code>wasmBranchDepth</code>
+- Tracks the <strong>current branch depth</strong> inside WASM-related blocks (e.g., loops, blocks)
+- Increments at the start of a <code>WasmOperation</code>, and decrements at the end
+- (For handling WASM block control outside of JS)</p>
+</li>
+</ul>
+<p> </p>
+
+<h2 id="analyze_-instr-instruction">
+  <code>analyze(_ instr: Instruction)</code>
+  <a href="#analyze_-instr-instruction" class="hanchor" ariaLabel="Anchor"></a>
+</h2>
+
+<div class="highlight-wrapper">
+  <div class="highlight-toolbar">
+    <span class="item">
+      <span class="label">Lang:</span>
+      <span class="name">swift</span>
+    </span>
+
+
+    <button class="item right outline brighter hide js-btn-copy-code">Copy</button>
+  </div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-swift" data-lang="swift"><span style="display:flex;"><span><span style="color:#66d9ef">mutating</span> <span style="color:#66d9ef">func</span> <span style="color:#a6e22e">analyze</span>(<span style="color:#66d9ef">_</span> instr: Instruction) {
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// Scope management (1).</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">if</span> instr.isBlockEnd {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">let</span> variablesInClosedScope = scopes.pop()
+</span></span><span style="display:flex;"><span>        visibleVariables.removeLast(variablesInClosedScope)
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">if</span> instr.op <span style="color:#66d9ef">is</span> WasmOperation {
+</span></span><span style="display:flex;"><span>            wasmBranchDepth <span style="color:#f92672">-=</span> <span style="color:#ae81ff">1</span>
+</span></span><span style="display:flex;"><span>        }
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    scopes.top <span style="color:#f92672">+=</span> instr.numOutputs
+</span></span><span style="display:flex;"><span>    visibleVariables.append(contentsOf: instr.outputs)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// Scope management (2).</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">if</span> instr.isBlockStart {
+</span></span><span style="display:flex;"><span>        scopes.push(<span style="color:#ae81ff">0</span>)
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">if</span> instr.op <span style="color:#66d9ef">is</span> WasmOperation {
+</span></span><span style="display:flex;"><span>            wasmBranchDepth <span style="color:#f92672">+=</span> <span style="color:#ae81ff">1</span>
+</span></span><span style="display:flex;"><span>        }
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    scopes.top <span style="color:#f92672">+=</span> instr.numInnerOutputs
+</span></span><span style="display:flex;"><span>    visibleVariables.append(contentsOf: instr.innerOutputs)
+</span></span><span style="display:flex;"><span>}</span></span></code></pre></div></div>
+<p> </p>
+<p>Let&rsquo;s walk through the flow:</p>
+<p> </p>
+<ul>
+<li>
+<p><strong>Block End</strong> (<code>instr.isBlockEnd</code>)</p>
+<ul>
+<li>Pop from the <code>scopes</code> stack → use this value (<code>variablesInClosedScope</code>) to remove that many recently added variables from <code>visibleVariables</code></li>
+<li>If it&rsquo;s the end of a WASM block, then <code>wasmBranchDepth -= 1</code></li>
+</ul>
+</li>
+<li>
+<p>Instruction Outputs (<code>outputs</code>)</p>
+<ul>
+<li>Increase the current scope’s variable count (<code>scopes.top</code>) by the number of output (new) variables</li>
+<li>Add these new variables to <code>visibleVariables</code></li>
+</ul>
+</li>
+<li>
+<p><strong>Block Start</strong> (<code>instr.isBlockStart</code>)</p>
+<ul>
+<li>Push a new scope (<code>push(0)</code>) to the stack</li>
+<li>If it’s the start of a WASM block, then <code>wasmBranchDepth += 1</code></li>
+</ul>
+</li>
+<li>
+<p><strong>innerOutputs</strong></p>
+<ul>
+<li>Variables that are <strong>not visible outside the current scope</strong></li>
+<li>Example: <code>BeginFunctionDefinition</code> → parameters that are only visible inside the function body</li>
+<li>Similarly, increase <code>scopes.top</code> by <code>instr.numInnerOutputs</code> and add those variables to <code>visibleVariables</code></li>
+</ul>
+</li>
+</ul>
+<p> </p>
+<blockquote>
+<p>In summary, <code>VariableAnalyzer</code> keeps track of <strong>when new variables are created</strong>, and <strong>when scopes open and close</strong>, maintaining an up-to-date list of currently live variables (<code>visibleVariables</code>).</p></blockquote>
+<p> </p>
+
+<h2 id="4-contextanalyzer">
+  4. ContextAnalyzer
+  <a href="#4-contextanalyzer" class="hanchor" ariaLabel="Anchor"></a>
+</h2>
+
+<div class="highlight-wrapper">
+  <div class="highlight-toolbar">
+    <span class="item">
+      <span class="label">Lang:</span>
+      <span class="name">swift</span>
+    </span>
+
+
+    <button class="item right outline brighter hide js-btn-copy-code">Copy</button>
+  </div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-swift" data-lang="swift"><span style="display:flex;"><span><span style="color:#66d9ef">struct</span> <span style="color:#a6e22e">ContextAnalyzer</span>: Analyzer {
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">private</span> <span style="color:#66d9ef">var</span> contextStack = Stack([Context.javascript])
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">var</span> context: Context {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> contextStack.top
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">mutating</span> <span style="color:#66d9ef">func</span> <span style="color:#a6e22e">analyze</span>(<span style="color:#66d9ef">_</span> instr: Instruction) { ... }
+</span></span><span style="display:flex;"><span>}</span></span></code></pre></div></div>
+<p> </p>
+<blockquote>
+<p>Tracks the current <strong>execution context</strong> of the code.
+In FuzzIL, the concept of a <code>Context</code> is used to represent various execution states—such as “inside a loop?”, “inside a switch statement?”—using a bitmask format.</p></blockquote>
+<p> </p>
+
+<h2 id="analyze_-instr-instruction-1">
+  <code>analyze(_ instr: Instruction)</code>
+  <a href="#analyze_-instr-instruction-1" class="hanchor" ariaLabel="Anchor"></a>
+</h2>
+
+<div class="highlight-wrapper">
+  <div class="highlight-toolbar">
+    <span class="item">
+      <span class="label">Lang:</span>
+      <span class="name">swift</span>
+    </span>
+
+
+    <button class="item right outline brighter hide js-btn-copy-code">Copy</button>
+  </div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-swift" data-lang="swift"><span style="display:flex;"><span><span style="color:#66d9ef">if</span> instr.isBlockEnd {
+</span></span><span style="display:flex;"><span>    contextStack.pop()
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">if</span> instr.isBlockStart {
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">var</span> newContext = instr.op.contextOpened
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">if</span> instr.propagatesSurroundingContext {
+</span></span><span style="display:flex;"><span>        newContext.formUnion(context)
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>                
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">if</span> instr.skipsSurroundingContext {
+</span></span><span style="display:flex;"><span>        assert(<span style="color:#f92672">!</span>instr.propagatesSurroundingContext)
+</span></span><span style="display:flex;"><span>        assert(contextStack.count <span style="color:#f92672">&gt;=</span> <span style="color:#ae81ff">2</span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        assert((contextStack.top.contains(.switchBlock) <span style="color:#f92672">&amp;&amp;</span> contextStack.top.subtracting(.switchBlock) == .empty))
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        newContext.formUnion(contextStack.secondToTop)
+</span></span><span style="display:flex;"><span>    }     
+</span></span><span style="display:flex;"><span>    
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">if</span> (instr.op.contextOpened.contains(.switchBlock) <span style="color:#f92672">||</span> instr.op.contextOpened.contains(.switchCase)) {
+</span></span><span style="display:flex;"><span>        newContext.remove(.loop)
+</span></span><span style="display:flex;"><span>    } <span style="color:#66d9ef">else</span> <span style="color:#66d9ef">if</span> (instr.op.contextOpened.contains(.loop)) {
+</span></span><span style="display:flex;"><span>        newContext.remove(.switchBlock) 
+</span></span><span style="display:flex;"><span>        newContext.remove(.switchCase)
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>    contextStack.push(newContext)
+</span></span><span style="display:flex;"><span>}</span></span></code></pre></div></div>
+<p> </p>
+<ul>
+<li>At block end, call <code>contextStack.pop()</code> → returns to the outer (parent) context</li>
+<li>At block start:
+<ul>
+<li>Retrieve <code>instr.op.contextOpened</code> to check what kind of context the new block introduces</li>
+<li>If <code>propagatesSurroundingContext</code> is true, merge the new context with the surrounding (parent) context</li>
+<li>If <code>skipsSurroundingContext</code> is set, adjust the logic to use the context above the current one instead</li>
+<li>Finally, <code>push</code> the computed <code>newContext</code> to set it as the <strong>current execution context</strong></li>
+</ul>
+</li>
+</ul>
+<p> </p>
+
+<h3 id="example-scenarios">
+  Example Scenarios
+  <a href="#example-scenarios" class="hanchor" ariaLabel="Anchor"></a>
+</h3>
+<ul>
+<li><code>BeginWhileLoop</code> → opens a <code>.loop</code> context, and special handling applies to instructions inside that context</li>
+<li><code>BeginSwitch</code> → opens a <code>.switchBlock</code>, and each <code>case</code> adds a <code>.switchCase</code> context, etc.</li>
+</ul>
+<p> </p>
+<blockquote>
+<p>This analyzer allows the system to understand things like &ldquo;<strong>Which block will be exited if a break occurs now?</strong>&rdquo;</p></blockquote>
+<p> </p>
+
+<h2 id="5-deadcodeanalyzer">
+  5. DeadCodeAnalyzer
+  <a href="#5-deadcodeanalyzer" class="hanchor" ariaLabel="Anchor"></a>
+</h2>
+
+<div class="highlight-wrapper">
+  <div class="highlight-toolbar">
+    <span class="item">
+      <span class="label">Lang:</span>
+      <span class="name">swift</span>
+    </span>
+
+
+    <button class="item right outline brighter hide js-btn-copy-code">Copy</button>
+  </div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-swift" data-lang="swift"><span style="display:flex;"><span><span style="color:#66d9ef">struct</span> <span style="color:#a6e22e">DeadCodeAnalyzer</span>: Analyzer {
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">private</span> <span style="color:#66d9ef">var</span> depth = <span style="color:#ae81ff">0</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">var</span> currentlyInDeadCode: Bool {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> depth <span style="color:#f92672">!=</span> <span style="color:#ae81ff">0</span>
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">mutating</span> <span style="color:#66d9ef">func</span> <span style="color:#a6e22e">analyze</span>(<span style="color:#66d9ef">_</span> instr: Instruction) {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">if</span> instr.isBlockEnd <span style="color:#f92672">&amp;&amp;</span> currentlyInDeadCode {
+</span></span><span style="display:flex;"><span>            depth <span style="color:#f92672">-=</span> <span style="color:#ae81ff">1</span>
+</span></span><span style="display:flex;"><span>        }
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">if</span> instr.isBlockStart <span style="color:#f92672">&amp;&amp;</span> currentlyInDeadCode {
+</span></span><span style="display:flex;"><span>            depth <span style="color:#f92672">+=</span> <span style="color:#ae81ff">1</span>
+</span></span><span style="display:flex;"><span>        }
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">if</span> instr.isJump <span style="color:#f92672">&amp;&amp;</span> <span style="color:#f92672">!</span>currentlyInDeadCode {
+</span></span><span style="display:flex;"><span>            depth = <span style="color:#ae81ff">1</span>
+</span></span><span style="display:flex;"><span>        }
+</span></span><span style="display:flex;"><span>        assert(depth <span style="color:#f92672">&gt;=</span> <span style="color:#ae81ff">0</span>)
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>}</span></span></code></pre></div></div>
+<p> </p>
+<p>A simple analyzer that tracks whether the current code is <strong>dead code</strong> (i.e., code that will never be executed).
+It uses a <code>depth</code> counter to manage whether it has entered a state where &ldquo;code beyond this point will never execute&rdquo; (<code>currentlyInDeadCode</code>).</p>
+<p> </p>
+<ul>
+<li>If <code>instr.isJump &amp;&amp; !currentlyInDeadCode</code>:
+<ul>
+<li>When there is a <strong>control-flow jump</strong> in the current block (e.g., <code>return</code>, <code>break</code>, etc.), and we were not already in dead code,</li>
+<li>Then the analyzer sets <code>depth = 1</code>, marking the rest as <strong>dead code</strong></li>
+</ul>
+</li>
+<li>At <code>isBlockStart</code> / <code>isBlockEnd</code> points:
+<ul>
+<li>If already in dead code, it <strong>increments or decrements</strong> the <code>depth</code> to properly track <strong>nested dead code blocks</strong>.</li>
+</ul>
+</li>
+<li>An assertion <code>assert(depth &gt;= 0)</code> ensures the <code>depth</code> never drops below zero.</li>
+</ul>
+<p> </p>
+<p>So for patterns like ( e.g. &ldquo;<code>if(true) { return; } // code here is dead</code>&rdquo;) the code after return is correctly marked as dead code.</p>
+<p>In FuzzIL, <code>isJump</code> can correspond to instructions like <code>Return</code>, <code>Break</code>, <code>Continue</code>, or branching operations in JS/WASM.</p>
+<p> </p>
+
+<h2 id="summary">
+  <strong>Summary</strong>
+  <a href="#summary" class="hanchor" ariaLabel="Anchor"></a>
+</h2>
+<ul>
+<li><code>Analyzer</code> <strong>Protocol</strong>: A common interface for walking through a FuzzIL program and analyzing each instruction</li>
+<li><code>DefUseAnalyzer</code>: Tracks where variables are defined and used; useful for optimizations like dead code elimination and partial redundancy elimination</li>
+<li><code>VariableAnalyzer</code>: Maintains a list of variables that are currently visible, based on block-level scoping</li>
+<li><code>ContextAnalyzer</code>: Tracks the current execution context (e.g., within a loop, switch statement, etc.)</li>
+<li><code>DeadCodeAnalyzer</code>: Identifies parts of the code that are no longer executed due to control-flow jumps</li>
+</ul>
+<p> </p>
+
+<h1 id="blocksswift">
+  Blocks.swift
+  <a href="#blocksswift" class="hanchor" ariaLabel="Anchor"></a>
+</h1>
+<hr>
+
+<div class="highlight-wrapper">
+  <div class="highlight-toolbar">
+    <span class="item">
+      <span class="label">Lang:</span>
+      <span class="name">swift</span>
+    </span>
+
+
+    <button class="item right outline brighter hide js-btn-copy-code">Copy</button>
+  </div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-swift" data-lang="swift"><span style="display:flex;"><span><span style="color:#75715e">// Copyright 2019 Google LLC</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">//</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// Licensed under the Apache License, Version 2.0 (the &#34;License&#34;);</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// you may not use this file except in compliance with the License.</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// You may obtain a copy of the License at</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">//</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// https://www.apache.org/licenses/LICENSE-2.0</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">//</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// Unless required by applicable law or agreed to in writing, software</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// distributed under the License is distributed on an &#34;AS IS&#34; BASIS,</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// See the License for the specific language governing permissions and</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// limitations under the License.</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">/// A block is a sequence of instruction which starts at an opening instruction (isBlockBegin is true)</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">/// and ends at the next closing instruction (isBlockEnd is true) of the same nesting depth.</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">/// An example for a block is a loop:</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">///</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">///     BeginWhileLoop</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">///         ...</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">///     EndWhileLoop</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">///</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">/// A block contains the starting and ending instructions which are also referred to as &#34;head&#34; and &#34;tail&#34;.</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">public</span> <span style="color:#66d9ef">struct</span> <span style="color:#a6e22e">Block</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">/// Index of the head of the block</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">let</span> head: Int
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">/// Index of the tail of the block group</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">let</span> tail: Int
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">/// The number of instructions in this block, including the two block instructions themselves.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">var</span> size: Int {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> tail <span style="color:#f92672">-</span> head <span style="color:#f92672">+</span> <span style="color:#ae81ff">1</span>
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">/// Returns the indices of all instructions in this block.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">var</span> allInstructions: [Int] {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> Array(head...tail)
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">init</span>(head: Int, tail: Int, <span style="color:#66d9ef">in</span> code: Code) {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">self</span>.head = head
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">self</span>.tail = tail
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        assert(head <span style="color:#f92672">&lt;</span> tail)
+</span></span><span style="display:flex;"><span>        assert(code[head].isBlockStart)
+</span></span><span style="display:flex;"><span>        assert(code[tail].isBlockEnd)
+</span></span><span style="display:flex;"><span>        assert(code.findBlockBegin(end: tail) == head)
+</span></span><span style="display:flex;"><span>        assert(code.findBlockEnd(head: head) == tail)
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    fileprivate <span style="color:#66d9ef">init</span>(head: Int, tail: Int) {
+</span></span><span style="display:flex;"><span>        assert(head <span style="color:#f92672">&lt;</span> tail)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">self</span>.head = head
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">self</span>.tail = tail
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">/// A block group is a sequence of blocks (and thus instructions) that is started by an opening instruction</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">/// that is not closing an existing block (isBlockBegin is true and isBlockEnd is false) and ends at a closing</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">/// instruction that doesn&#39;t open a new block (isBlockEnd is true and isBlockBegin is false).</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">/// An example for a block group is an if-else statement:</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">///</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">///     BeginIf</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">///        ; block 1</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">///        ...</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">///     BeginElse</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">///        ; block 2</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">///        ...</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">///     EndIf</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">///</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">public</span> <span style="color:#66d9ef">struct</span> <span style="color:#a6e22e">BlockGroup</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">/// The indices of the block instructions belonging to this block group in the code.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">private</span> <span style="color:#66d9ef">let</span> blockInstructions: [Int]
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">/// Index of the first instruction in this block group (the opening instruction).</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">var</span> head: Int {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> blockInstructions.first!
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">/// Index of the last instruction in this block group (the closing instruction).</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">var</span> tail: Int {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> blockInstructions.last!
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">/// The number of instructions in this block group.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">var</span> size: Int {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> tail <span style="color:#f92672">-</span> head <span style="color:#f92672">+</span> <span style="color:#ae81ff">1</span>
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">/// The number of blocks that are part of this block group.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">var</span> numBlocks: Int {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> blockInstructions.count <span style="color:#f92672">-</span> <span style="color:#ae81ff">1</span>
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">/// The indices of all block instructions belonging to this block group.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">var</span> blockInstructionIndices: [Int] {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> blockInstructions
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">/// The indices of all instructions in this block group.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">var</span> instructionIndices: [Int] {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> Array(head...tail)
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">/// All blocks of this block group.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">var</span> blocks: [Block] {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> (<span style="color:#ae81ff">0.</span>.&lt;numBlocks).map(block)
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">/// Returns the i-th block in this block group.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">func</span> <span style="color:#a6e22e">block</span>(<span style="color:#66d9ef">_</span> i: Int) -&gt; Block {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> Block(head: blockInstructions[i], tail: blockInstructions[i <span style="color:#f92672">+</span> <span style="color:#ae81ff">1</span>])
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">/// Constructs a block group from the a list of block instructions.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">init</span>(<span style="color:#66d9ef">_</span> blockInstructions: [Int], <span style="color:#66d9ef">in</span> code: Code) {
+</span></span><span style="display:flex;"><span>        assert(blockInstructions.count <span style="color:#f92672">&gt;=</span> <span style="color:#ae81ff">2</span>)
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">self</span>.blockInstructions = blockInstructions
+</span></span><span style="display:flex;"><span>        assert(code[head].isBlockGroupStart)
+</span></span><span style="display:flex;"><span>        assert(code[tail].isBlockGroupEnd)
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">for</span> intermediate <span style="color:#66d9ef">in</span> blockInstructions.dropFirst().dropLast() {
+</span></span><span style="display:flex;"><span>            assert(code[intermediate].isBlockStart <span style="color:#f92672">&amp;&amp;</span> code[intermediate].isBlockEnd)
+</span></span><span style="display:flex;"><span>        }
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>}</span></span></code></pre></div></div>
+<p> </p>
+
+<h2 id="1-blocks">
+  1. Blocks
+  <a href="#1-blocks" class="hanchor" ariaLabel="Anchor"></a>
+</h2>
+
+<div class="highlight-wrapper">
+  <div class="highlight-toolbar">
+    <span class="item">
+      <span class="label">Lang:</span>
+      <span class="name">swift</span>
+    </span>
+
+
+    <button class="item right outline brighter hide js-btn-copy-code">Copy</button>
+  </div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-swift" data-lang="swift"><span style="display:flex;"><span><span style="color:#66d9ef">public</span> <span style="color:#66d9ef">struct</span> <span style="color:#a6e22e">Block</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">let</span> head: Int
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">let</span> tail: Int
+</span></span><span style="display:flex;"><span>    
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">var</span> size: Int {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> tail <span style="color:#f92672">-</span> head <span style="color:#f92672">+</span> <span style="color:#ae81ff">1</span>
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">var</span> allInstructions: [Int] {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> Array(head...tail)
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">init</span>(head: Int, tail: Int, <span style="color:#66d9ef">in</span> code: Code) {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">self</span>.head = head
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">self</span>.tail = tail
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        assert(head <span style="color:#f92672">&lt;</span> tail)
+</span></span><span style="display:flex;"><span>        assert(code[head].isBlockStart)
+</span></span><span style="display:flex;"><span>        assert(code[tail].isBlockEnd)
+</span></span><span style="display:flex;"><span>        assert(code.findBlockBegin(end: tail) == head)
+</span></span><span style="display:flex;"><span>        assert(code.findBlockEnd(head: head) == tail)
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    fileprivate <span style="color:#66d9ef">init</span>(head: Int, tail: Int) {
+</span></span><span style="display:flex;"><span>        assert(head <span style="color:#f92672">&lt;</span> tail)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">self</span>.head = head
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">self</span>.tail = tail
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>}</span></span></code></pre></div></div>
+<p> </p>
+<p>A <code>Block</code> represents a single FuzzIL block (e.g., a while loop, if-branch, try-catch block, etc.).
+Typically, it starts with a <code>BeginXxx</code> instruction (<code>isBlockStart = true</code>) and ends with an <code>EndXxx</code> instruction (<code>isBlockEnd = true</code>).
+The <code>head</code> is the instruction index where the block begins, and the <code>tail</code> is the index where it ends.</p>
+
+<h2 id="key-properties">
+  Key Properties
+  <a href="#key-properties" class="hanchor" ariaLabel="Anchor"></a>
+</h2>
+<ul>
+<li>
+<p><code>size</code></p>
+<ul>
+<li>Calculated as <code>tail - head + 1</code></li>
+<li>Represents the <strong>total number of instruction</strong>s in the block (including both start and end)</li>
+</ul>
+</li>
+<li>
+<p><code>allInstructions</code></p>
+<ul>
+<li>Returns an array covering the range <code>[head...tail]</code></li>
+<li>Lists all instruction indices that belong to this block</li>
+</ul>
+</li>
+<li>
+<p><strong>Initializer</strong> <code>init(head: Int, tail: Int, in code: Code)</code></p>
+<ul>
+<li>Performs assertions to ensure:
+<ul>
+<li><code>head &lt; tail</code></li>
+<li><code>code[head].isBlockStart</code> is true</li>
+<li><code>code[tail].isBlockEnd</code> is true</li>
+</ul>
+</li>
+<li>Also verifies that:
+<ul>
+<li><code>code.findBlockBegin(end: tail) == head</code></li>
+<li><code>code.findBlockEnd(head: head) == tail</code></li>
+<li>These checks confirm that the block has a <strong>properly matched begin–end pair</strong></li>
+</ul>
+</li>
+</ul>
+</li>
+<li>
+<p><strong>Initializer</strong> <code>fileprivate init(head: Int, tail: Int)</code></p>
+<ul>
+<li>Used when constructing a <code>Block</code> inside a <code>BlockGroup</code></li>
+<li>Only asserts <code>head &lt; tail</code>; full validation is done in the initializer above</li>
+</ul>
+</li>
+</ul>
+<p> </p>
+<blockquote>
+<p><strong>Summary</strong>: A <code>Block</code> explicitly represents the region in FuzzIL code defined by a matching <code>BeginXxx</code> and <code>EndXxx</code> instruction pair.
+All instruction indices between <code>head</code> and <code>tail</code> are considered the <strong>body of the block</strong>.</p></blockquote>
+<p> </p>
+
+<h2 id="2-blockgroup">
+  2. BlockGroup
+  <a href="#2-blockgroup" class="hanchor" ariaLabel="Anchor"></a>
+</h2>
+
+<div class="highlight-wrapper">
+  <div class="highlight-toolbar">
+    <span class="item">
+      <span class="label">Lang:</span>
+      <span class="name">swift</span>
+    </span>
+
+
+    <button class="item right outline brighter hide js-btn-copy-code">Copy</button>
+  </div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-swift" data-lang="swift"><span style="display:flex;"><span><span style="color:#66d9ef">public</span> <span style="color:#66d9ef">struct</span> <span style="color:#a6e22e">BlockGroup</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">private</span> <span style="color:#66d9ef">let</span> blockInstructions: [Int]
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">var</span> head: Int {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> blockInstructions.first!
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">var</span> tail: Int {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> blockInstructions.last!
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">var</span> size: Int {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> tail <span style="color:#f92672">-</span> head <span style="color:#f92672">+</span> <span style="color:#ae81ff">1</span>
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">var</span> numBlocks: Int {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> blockInstructions.count <span style="color:#f92672">-</span> <span style="color:#ae81ff">1</span>
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">var</span> blockInstructionIndices: [Int] {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> blockInstructions
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">var</span> instructionIndices: [Int] {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> Array(head...tail)
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">var</span> blocks: [Block] {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> (<span style="color:#ae81ff">0.</span>.&lt;numBlocks).map(block)
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">func</span> <span style="color:#a6e22e">block</span>(<span style="color:#66d9ef">_</span> i: Int) -&gt; Block {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> Block(head: blockInstructions[i], tail: blockInstructions[i <span style="color:#f92672">+</span> <span style="color:#ae81ff">1</span>])
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">init</span>(<span style="color:#66d9ef">_</span> blockInstructions: [Int], <span style="color:#66d9ef">in</span> code: Code) {
+</span></span><span style="display:flex;"><span>        assert(blockInstructions.count <span style="color:#f92672">&gt;=</span> <span style="color:#ae81ff">2</span>)
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">self</span>.blockInstructions = blockInstructions
+</span></span><span style="display:flex;"><span>        assert(code[head].isBlockGroupStart)
+</span></span><span style="display:flex;"><span>        assert(code[tail].isBlockGroupEnd)
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">for</span> intermediate <span style="color:#66d9ef">in</span> blockInstructions.dropFirst().dropLast() {
+</span></span><span style="display:flex;"><span>            assert(code[intermediate].isBlockStart <span style="color:#f92672">&amp;&amp;</span> code[intermediate].isBlockEnd)
+</span></span><span style="display:flex;"><span>        }
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>}</span></span></code></pre></div></div>
+<p> </p>
+<p>A <code>BlockGroup</code> represents a structure where <strong>multiple blocks are grouped together</strong>.
+A classic example of this is an <strong>If-Else</strong> statement.</p>
+<p> </p>
+<ul>
+<li><code>BeginIf</code> → Block 1 → <code>BeginElse</code> → Block 2 → <code>EndIf</code></li>
+<li>In this case, <code>BeginIf</code>, <code>BeginElse</code>, and <code>EndIf</code> are all considered block boundaries (<code>isBlockStart</code> / <code>isBlockEnd</code>),
+so within one <strong>BlockGroup</strong>, there are <strong>two Blocks</strong>.</li>
+</ul>
+<p> </p>
+
+<h3 id="why-group-them">
+  Why group them?
+  <a href="#why-group-them" class="hanchor" ariaLabel="Anchor"></a>
+</h3>
+<p>In constructs like If-Else, multiple blocks form a <strong>single logical unit (syntactic construct)</strong>.
+It’s hard to represent such a structure using only a single <code>Block</code>.
+<code>BlockGroup</code> collects the <strong>instruction indices of all block-related instructions</strong> (e.g., <code>BeginIf</code>, <code>BeginElse</code>, <code>EndIf</code>),
+and allows each individual <code>Block</code> to be extracted and analyzed.</p>
+<p> </p>
+
+<h2 id="key-properties-1">
+  Key Properties
+  <a href="#key-properties-1" class="hanchor" ariaLabel="Anchor"></a>
+</h2>
+<ul>
+<li><code>blockInstructions</code>
+<ul>
+<li>A list of <strong>all block boundary instruction indices</strong> within this <code>BlockGroup</code></li>
+<li>Example: In an If-Else, this might include [<code>BeginIf</code>, <code>BeginElse</code>, <code>EndIf</code>]</li>
+</ul>
+</li>
+<li><code>head</code> &amp; <code>tail</code>
+<ul>
+<li>The first and last instruction indices of the group</li>
+<li><code>head = blockInstructions.first!</code>, <code>tail = blockInstructions.last!</code></li>
+</ul>
+</li>
+<li><code>size</code>
+<ul>
+<li>Calculated as <code>tail - head + 1</code></li>
+<li>The total number of instructions covered by this group</li>
+</ul>
+</li>
+<li><code>numBlocks</code>
+<ul>
+<li>Computed as <code>blockInstructions.count - 1</code></li>
+<li>Indicates how many <code>Block</code>s exist in this group</li>
+<li>For example: 2 for If-Else, 3 for If-ElseIf-Else</li>
+</ul>
+</li>
+<li><code>blocks</code> (Array)
+<ul>
+<li>Generated via <code>(0..&lt;numBlocks).map(block)</code></li>
+<li>Each block is created as <code>Block(head: blockInstructions[i], tail: blockInstructions[i + 1])</code></li>
+<li>For If-Else: returns two <code>Blocks</code> like <code>[ (BeginIf, BeginElse), (BeginElse, EndIf) ]</code></li>
+</ul>
+</li>
+<li><code>instructionIndices</code>
+<ul>
+<li>The full range <code>[head...tail]</code></li>
+<li>Represents all instruction indices covered by this BlockGroup</li>
+</ul>
+</li>
+</ul>
+<p> </p>
+
+<h2 id="constructor-init_-blockinstructions-int-in-code-code">
+  Constructor <code>init(_ blockInstructions: [Int], in code: Code)</code>
+  <a href="#constructor-init_-blockinstructions-int-in-code-code" class="hanchor" ariaLabel="Anchor"></a>
+</h2>
+
+<div class="highlight-wrapper">
+  <div class="highlight-toolbar">
+    <span class="item">
+      <span class="label">Lang:</span>
+      <span class="name">swift</span>
+    </span>
+
+
+    <button class="item right outline brighter hide js-btn-copy-code">Copy</button>
+  </div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-swift" data-lang="swift"><span style="display:flex;"><span><span style="color:#66d9ef">public</span> <span style="color:#66d9ef">init</span>(<span style="color:#66d9ef">_</span> blockInstructions: [Int], <span style="color:#66d9ef">in</span> code: Code) {
+</span></span><span style="display:flex;"><span>    assert(blockInstructions.count <span style="color:#f92672">&gt;=</span> <span style="color:#ae81ff">2</span>)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">self</span>.blockInstructions = blockInstructions
+</span></span><span style="display:flex;"><span>    assert(code[head].isBlockGroupStart)
+</span></span><span style="display:flex;"><span>    assert(code[tail].isBlockGroupEnd)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">for</span> intermediate <span style="color:#66d9ef">in</span> blockInstructions.dropFirst().dropLast() {
+</span></span><span style="display:flex;"><span>        assert(code[intermediate].isBlockStart <span style="color:#f92672">&amp;&amp;</span> code[intermediate].isBlockEnd)
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>}</span></span></code></pre></div></div>
+<p> </p>
+<ul>
+<li><strong>Precondition</strong>: <code>blockInstructions.count &gt;= 2</code>
+<ul>
+<li>There must be at least a start and end instruction to form a valid group</li>
+</ul>
+</li>
+<li><strong>Validation</strong>:
+<ul>
+<li><code>code[head].isBlockGroupStart</code> must be true</li>
+<li><code>code[tail].isBlockGroupEnd</code> must be true</li>
+<li>All intermediate elements (<code>dropFirst().dropLast()</code>) must satisfy
+<code>isBlockStart &amp;&amp; isBlockEnd</code> (e.g., <code>BeginElse</code> or similar)
+<ul>
+<li>That is, intermediate blocks in constructs like If-Else must be <strong>both block start and end</strong>, representing transitions such as an <code>Else</code> block</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<p> </p>
+<p>This validation ensures that <strong>multi-block structures</strong> (like <code>If</code>, <code>Else</code>, <code>ElseIf</code>, <code>Switch-case</code>, etc.) are <strong>correctly grouped</strong> into a single <code>BlockGroup</code>.</p>
+<p> </p>
+
+<h2 id="summary-1">
+  <strong>Summary</strong>
+  <a href="#summary-1" class="hanchor" ariaLabel="Anchor"></a>
+</h2>
+<ul>
+<li><code>Block</code>: Represents a <strong>single block</strong> (e.g., <code>BeginWhileLoop</code> to <code>EndWhileLoop</code>)
+<ul>
+<li>Tracks the entire instruction range using <code>head</code> and <code>tail</code></li>
+<li>Provides helpers like <code>size</code> and <code>allInstructions</code> to easily access all instructions within the block</li>
+</ul>
+</li>
+<li><code>BlockGroup</code>: Represents a <strong>multi-block structure grouped into a single construct</strong> (e.g., If-Else, Try-Catch, Switch-Case)
+<ul>
+<li>Holds key block transition points (e.g., <code>BeginIf</code>, <code>BeginElse</code>, <code>EndIf</code>) in <code>blockInstructions</code></li>
+<li>Can reconstruct individual <code>Blocks</code> using the <code>blocks</code> property</li>
+<li><code>size</code> and <code>instructionIndices</code> allow quick access to the overall instruction range of the group</li>
+</ul>
+</li>
+</ul>
+<p> </p>
+<blockquote>
+<p>In FuzzIL, when performing <strong>control-flow analysis or transformation</strong>, it is crucial to identify <strong>where each block begins and ends</strong> and to understand <strong>compound control structures</strong> (e.g., <code>if-else-if</code>).
+The <code>Block</code> and <code>BlockGroup</code> structures provide a clear and manageable way to handle <strong>instruction index ranges per block</strong>, enabling accurate analysis and rewriting of FuzzIL programs.</p></blockquote>
+<p> </p>
+
+<h1 id="contextswift">
+  Context.swift
+  <a href="#contextswift" class="hanchor" ariaLabel="Anchor"></a>
+</h1>
+
+<div class="highlight-wrapper">
+  <div class="highlight-toolbar">
+    <span class="item">
+      <span class="label">Lang:</span>
+      <span class="name">swift</span>
+    </span>
+
+
+    <button class="item right outline brighter hide js-btn-copy-code">Copy</button>
+  </div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-swift" data-lang="swift"><span style="display:flex;"><span><span style="color:#75715e">// Copyright 2020 Google LLC</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">//</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// Licensed under the Apache License, Version 2.0 (the &#34;License&#34;);</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// you may not use this file except in compliance with the License.</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// You may obtain a copy of the License at</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">//</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// https://www.apache.org/licenses/LICENSE-2.0</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">//</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// Unless required by applicable law or agreed to in writing, software</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// distributed under the License is distributed on an &#34;AS IS&#34; BASIS,</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// See the License for the specific language governing permissions and</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// limitations under the License.</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">/// Current context in the program</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">public</span> <span style="color:#66d9ef">struct</span> <span style="color:#a6e22e">Context</span>: OptionSet {
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">let</span> rawValue: UInt32
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">init</span>(rawValue: UInt32) {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">self</span>.rawValue = rawValue
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// Default javascript context.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">static</span> <span style="color:#66d9ef">let</span> javascript        = Context(rawValue: <span style="color:#ae81ff">1</span> <span style="color:#f92672">&lt;&lt;</span> <span style="color:#ae81ff">0</span>)
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// Inside a subroutine (function, constructor, method, ...) definition.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// This for example means that doing `return` or accessing `arguments` is allowed.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">static</span> <span style="color:#66d9ef">let</span> subroutine        = Context(rawValue: <span style="color:#ae81ff">1</span> <span style="color:#f92672">&lt;&lt;</span> <span style="color:#ae81ff">1</span>)
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// Inside a generator function definition.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// This for example means that `yield` and `yield*` are allowed.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">static</span> <span style="color:#66d9ef">let</span> generatorFunction = Context(rawValue: <span style="color:#ae81ff">1</span> <span style="color:#f92672">&lt;&lt;</span> <span style="color:#ae81ff">2</span>)
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// Inside an async function definition.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// This for example means that `await` is allowed.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">static</span> <span style="color:#66d9ef">let</span> asyncFunction     = Context(rawValue: <span style="color:#ae81ff">1</span> <span style="color:#f92672">&lt;&lt;</span> <span style="color:#ae81ff">3</span>)
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// Inside a method.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// This for example means that access to `super` is allowed.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">static</span> <span style="color:#66d9ef">let</span> method            = Context(rawValue: <span style="color:#ae81ff">1</span> <span style="color:#f92672">&lt;&lt;</span> <span style="color:#ae81ff">4</span>)
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// Inside a class method.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// This for example means that access to private properties is allowed.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">static</span> <span style="color:#66d9ef">let</span> classMethod       = Context(rawValue: <span style="color:#ae81ff">1</span> <span style="color:#f92672">&lt;&lt;</span> <span style="color:#ae81ff">5</span>)
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// Inside a loop.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">static</span> <span style="color:#66d9ef">let</span> loop              = Context(rawValue: <span style="color:#ae81ff">1</span> <span style="color:#f92672">&lt;&lt;</span> <span style="color:#ae81ff">6</span>)
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// Inside a with statement.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">static</span> <span style="color:#66d9ef">let</span> with              = Context(rawValue: <span style="color:#ae81ff">1</span> <span style="color:#f92672">&lt;&lt;</span> <span style="color:#ae81ff">7</span>)
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// Inside an object literal.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">static</span> <span style="color:#66d9ef">let</span> objectLiteral     = Context(rawValue: <span style="color:#ae81ff">1</span> <span style="color:#f92672">&lt;&lt;</span> <span style="color:#ae81ff">8</span>)
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// Inside a class definition.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">static</span> <span style="color:#66d9ef">let</span> classDefinition   = Context(rawValue: <span style="color:#ae81ff">1</span> <span style="color:#f92672">&lt;&lt;</span> <span style="color:#ae81ff">9</span>)
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// Inside a switch block.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">static</span> <span style="color:#66d9ef">let</span> switchBlock       = Context(rawValue: <span style="color:#ae81ff">1</span> <span style="color:#f92672">&lt;&lt;</span> <span style="color:#ae81ff">10</span>)
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// Inside a switch case.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">static</span> <span style="color:#66d9ef">let</span> switchCase        = Context(rawValue: <span style="color:#ae81ff">1</span> <span style="color:#f92672">&lt;&lt;</span> <span style="color:#ae81ff">11</span>)
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// Inside a wasm module</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">static</span> <span style="color:#66d9ef">let</span> wasm              = Context(rawValue: <span style="color:#ae81ff">1</span> <span style="color:#f92672">&lt;&lt;</span> <span style="color:#ae81ff">12</span>)
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// Inside a function in a wasm module</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">static</span> <span style="color:#66d9ef">let</span> wasmFunction      = Context(rawValue: <span style="color:#ae81ff">1</span> <span style="color:#f92672">&lt;&lt;</span> <span style="color:#ae81ff">13</span>)
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// Inside a block of a wasm function, allows branches</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">static</span> <span style="color:#66d9ef">let</span> wasmBlock         = Context(rawValue: <span style="color:#ae81ff">1</span> <span style="color:#f92672">&lt;&lt;</span> <span style="color:#ae81ff">14</span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">static</span> <span style="color:#66d9ef">let</span> empty             = Context([])
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// These contexts have ValueGenerators and as such we can .buildPrefix in them.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">var</span> isValueBuildableContext: Bool {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">self</span>.contains(.wasmFunction) <span style="color:#f92672">||</span> <span style="color:#66d9ef">self</span>.contains(.javascript)
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">var</span> inWasm: Bool {
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e">// .wasmBlock is propagating surrounding context</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">self</span>.contains(.wasm) <span style="color:#f92672">||</span> <span style="color:#66d9ef">self</span>.contains(.wasmFunction)
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>}</span></span></code></pre></div></div>
+<p> </p>
+
+<h2 id="1-context-structure">
+  1. Context Structure
+  <a href="#1-context-structure" class="hanchor" ariaLabel="Anchor"></a>
+</h2>
+
+<div class="highlight-wrapper">
+  <div class="highlight-toolbar">
+    <span class="item">
+      <span class="label">Lang:</span>
+      <span class="name">swift</span>
+    </span>
+
+
+    <button class="item right outline brighter hide js-btn-copy-code">Copy</button>
+  </div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-swift" data-lang="swift"><span style="display:flex;"><span><span style="color:#66d9ef">public</span> <span style="color:#66d9ef">struct</span> <span style="color:#a6e22e">Context</span>: OptionSet {
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">let</span> rawValue: UInt32
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">init</span>(rawValue: UInt32) {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">self</span>.rawValue = rawValue
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    ...
+</span></span><span style="display:flex;"><span>}</span></span></code></pre></div></div>
+<p> </p>
+<p>A structure that adopts <code>OptionSet</code>, allowing multiple bit flags to be combined to represent a context.
+Its <code>rawValue</code> is one of the <code>UInt32</code> types, enabling up to 32 independent flags.</p>
+<p> </p>
+<p><strong>Example</strong>:</p>
+<ul>
+<li>If both <code>Context.javascript</code> and <code>Context.loop</code> are set, it can be expressed as:
+<code>someContext = [.javascript, .loop]</code></li>
+</ul>
+<p> </p>
+
+<h2 id="meaning-of-each-flag">
+  Meaning of each flag
+  <a href="#meaning-of-each-flag" class="hanchor" ariaLabel="Anchor"></a>
+</h2>
+<p>15 flag constants are defined in this code as follows.</p>
+
+<div class="highlight-wrapper">
+  <div class="highlight-toolbar">
+    <span class="item">
+      <span class="label">Lang:</span>
+      <span class="name">swift</span>
+    </span>
+
+
+    <button class="item right outline brighter hide js-btn-copy-code">Copy</button>
+  </div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-swift" data-lang="swift"><span style="display:flex;"><span><span style="color:#66d9ef">public</span> <span style="color:#66d9ef">static</span> <span style="color:#66d9ef">let</span> javascript        = Context(rawValue: <span style="color:#ae81ff">1</span> <span style="color:#f92672">&lt;&lt;</span> <span style="color:#ae81ff">0</span>)
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">public</span> <span style="color:#66d9ef">static</span> <span style="color:#66d9ef">let</span> subroutine        = Context(rawValue: <span style="color:#ae81ff">1</span> <span style="color:#f92672">&lt;&lt;</span> <span style="color:#ae81ff">1</span>)
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">public</span> <span style="color:#66d9ef">static</span> <span style="color:#66d9ef">let</span> generatorFunction = Context(rawValue: <span style="color:#ae81ff">1</span> <span style="color:#f92672">&lt;&lt;</span> <span style="color:#ae81ff">2</span>)
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">public</span> <span style="color:#66d9ef">static</span> <span style="color:#66d9ef">let</span> asyncFunction     = Context(rawValue: <span style="color:#ae81ff">1</span> <span style="color:#f92672">&lt;&lt;</span> <span style="color:#ae81ff">3</span>)
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">public</span> <span style="color:#66d9ef">static</span> <span style="color:#66d9ef">let</span> method            = Context(rawValue: <span style="color:#ae81ff">1</span> <span style="color:#f92672">&lt;&lt;</span> <span style="color:#ae81ff">4</span>)
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">public</span> <span style="color:#66d9ef">static</span> <span style="color:#66d9ef">let</span> classMethod       = Context(rawValue: <span style="color:#ae81ff">1</span> <span style="color:#f92672">&lt;&lt;</span> <span style="color:#ae81ff">5</span>)
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">public</span> <span style="color:#66d9ef">static</span> <span style="color:#66d9ef">let</span> loop              = Context(rawValue: <span style="color:#ae81ff">1</span> <span style="color:#f92672">&lt;&lt;</span> <span style="color:#ae81ff">6</span>)
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">public</span> <span style="color:#66d9ef">static</span> <span style="color:#66d9ef">let</span> with              = Context(rawValue: <span style="color:#ae81ff">1</span> <span style="color:#f92672">&lt;&lt;</span> <span style="color:#ae81ff">7</span>)
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">public</span> <span style="color:#66d9ef">static</span> <span style="color:#66d9ef">let</span> objectLiteral     = Context(rawValue: <span style="color:#ae81ff">1</span> <span style="color:#f92672">&lt;&lt;</span> <span style="color:#ae81ff">8</span>)
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">public</span> <span style="color:#66d9ef">static</span> <span style="color:#66d9ef">let</span> classDefinition   = Context(rawValue: <span style="color:#ae81ff">1</span> <span style="color:#f92672">&lt;&lt;</span> <span style="color:#ae81ff">9</span>)
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">public</span> <span style="color:#66d9ef">static</span> <span style="color:#66d9ef">let</span> switchBlock       = Context(rawValue: <span style="color:#ae81ff">1</span> <span style="color:#f92672">&lt;&lt;</span> <span style="color:#ae81ff">10</span>)
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">public</span> <span style="color:#66d9ef">static</span> <span style="color:#66d9ef">let</span> switchCase        = Context(rawValue: <span style="color:#ae81ff">1</span> <span style="color:#f92672">&lt;&lt;</span> <span style="color:#ae81ff">11</span>)
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">public</span> <span style="color:#66d9ef">static</span> <span style="color:#66d9ef">let</span> wasm              = Context(rawValue: <span style="color:#ae81ff">1</span> <span style="color:#f92672">&lt;&lt;</span> <span style="color:#ae81ff">12</span>)
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">public</span> <span style="color:#66d9ef">static</span> <span style="color:#66d9ef">let</span> wasmFunction      = Context(rawValue: <span style="color:#ae81ff">1</span> <span style="color:#f92672">&lt;&lt;</span> <span style="color:#ae81ff">13</span>)
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">public</span> <span style="color:#66d9ef">static</span> <span style="color:#66d9ef">let</span> wasmBlock         = Context(rawValue: <span style="color:#ae81ff">1</span> <span style="color:#f92672">&lt;&lt;</span> <span style="color:#ae81ff">14</span>)</span></span></code></pre></div></div>
+<p> </p>
+<p>Let&rsquo;s take a look at each item one by one.</p>
+<p> </p>
+<ul>
+<li><code>.javascript (1 &lt;&lt; 0)</code>
+<ul>
+<li>&ldquo;Standard JavaScript context.&rdquo;</li>
+<li>This means that the code is in standard JS, not in a non-JS context like WASM.</li>
+<li>Features like <code>await</code> or <code>yield</code> are not allowed in this context unless <code>.asyncFunction</code> or <code>.generatorFunction</code> is also set.</li>
+</ul>
+</li>
+<li><code>.subroutine (1 &lt;&lt; 1)</code>
+<ul>
+<li>&ldquo;Inside a subroutine (e.g., function, constructor, method).&rdquo;</li>
+<li>This context enables constructs like <code>return</code> or access to <code>arguments</code>.</li>
+<li>Set when entering any function-like block, including constructors.</li>
+</ul>
+</li>
+<li><code>.generatorFunction (1 &lt;&lt; 2)</code>
+<ul>
+<li>&ldquo;Inside a generator function (<code>function*</code>).&rdquo;</li>
+<li>Enables usage of generator-specific expressions like <code>yield</code> and <code>yield*</code>.</li>
+</ul>
+</li>
+<li><code>.asyncFunction (1 &lt;&lt; 3)</code>
+<ul>
+<li>&ldquo;Inside an async function (<code>async function</code>).&rdquo;</li>
+<li>Enables the use of <code>await</code>.</li>
+</ul>
+</li>
+<li><code>.method (1 &lt;&lt; 4)</code>
+<ul>
+<li>&ldquo;Inside an object method (not a class method).&rdquo;</li>
+<li>For example: <code>obj = { myMethod() { ... } }</code>.</li>
+<li>Affects whether constructs like <code>super</code> are allowed.</li>
+</ul>
+</li>
+<li><code>.classMethod (1 &lt;&lt; 5)</code>
+<ul>
+<li>&ldquo;Inside a class method (instance or static).&rdquo;</li>
+<li>Enables features like <code>super</code> and private fields.</li>
+<li>Differs from <code>.method</code> by being inside a class context.</li>
+</ul>
+</li>
+<li><code>.loop (1 &lt;&lt; 6)</code>
+<ul>
+<li>&ldquo;Inside a loop (e.g., <code>for</code>, <code>while</code>).&rdquo;</li>
+<li>Allows use of loop-specific control flow like <code>break</code> and <code>continue</code>.</li>
+</ul>
+</li>
+<li><code>.with (1 &lt;&lt; 7)</code>
+<ul>
+<li>&ldquo;Inside a <code>with</code> block (<code>with (obj) { ... }</code>).&rdquo;</li>
+<li>Though rarely used post-ES5 strict mode, still valid in JS and supported in FuzzIL.</li>
+</ul>
+</li>
+<li><code>.objectLiteral (1 &lt;&lt; 8)</code>
+<ul>
+<li>&ldquo;Inside an object literal.&rdquo;</li>
+<li>Context for writing property definitions and shorthand method syntax.</li>
+</ul>
+</li>
+<li><code>.classDefinition (1 &lt;&lt; 9)</code>
+<ul>
+<li>&ldquo;Inside a class definition (<code>class X { ... }</code>).&rdquo;</li>
+<li>Enables handling of class-specific constructs like <code>constructor</code>, <code>static</code>, and private fields.</li>
+</ul>
+</li>
+<li><code>.switchBlock (1 &lt;&lt; 10)</code>
+<ul>
+<li>&ldquo;Inside a <code>switch</code> block (<code>switch (val) { case ... }</code>).&rdquo;</li>
+<li>Allows use of <code>break</code>, <code>case</code>, and <code>default</code>.</li>
+</ul>
+</li>
+<li><code>.switchCase (1 &lt;&lt; 11)</code>
+<ul>
+<li>&ldquo;Inside a specific <code>case</code> block within a switch.&rdquo;</li>
+<li>For example: <code>case 10: ...</code>.</li>
+</ul>
+</li>
+<li><code>.wasm (1 &lt;&lt; 12)</code>
+<ul>
+<li>&ldquo;Inside a WebAssembly (WASM) context.&rdquo;</li>
+<li>Indicates that the code is part of the WASM region, not JavaScript.</li>
+<li>Used to differentiate during WASM code generation.</li>
+</ul>
+</li>
+<li><code>.wasmFunction (1 &lt;&lt; 13)</code>
+<ul>
+<li>&ldquo;Inside a WebAssembly function definition.&rdquo;</li>
+<li>Enables WASM-specific operations such as indexed locals and WASM intrinsics.</li>
+</ul>
+</li>
+<li><code>.wasmBlock (1 &lt;&lt; 14)</code>
+<ul>
+<li>&ldquo;Inside a block within a WASM function (e.g., branches, loops).&rdquo;</li>
+<li>Enables control flow constructs specific to WASM like <code>br</code>, <code>br_if</code>, and <code>block</code>.</li>
+</ul>
+</li>
+</ul>
+<p> </p>
+<p>The <code>public static constant 'empty = Context([])</code> represents a state with no active context at all.</p>
+<p> </p>
+
+<h2 id="additional-methods--properties">
+  Additional Methods &amp; Properties
+  <a href="#additional-methods--properties" class="hanchor" ariaLabel="Anchor"></a>
+</h2>
+
+<div class="highlight-wrapper">
+  <div class="highlight-toolbar">
+    <span class="item">
+      <span class="label">Lang:</span>
+      <span class="name">swift</span>
+    </span>
+
+
+    <button class="item right outline brighter hide js-btn-copy-code">Copy</button>
+  </div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-swift" data-lang="swift"><span style="display:flex;"><span><span style="color:#66d9ef">public</span> <span style="color:#66d9ef">var</span> isValueBuildableContext: Bool {
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">self</span>.contains(.wasmFunction) <span style="color:#f92672">||</span> <span style="color:#66d9ef">self</span>.contains(.javascript)
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">public</span> <span style="color:#66d9ef">var</span> inWasm: Bool {
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">self</span>.contains(.wasm) <span style="color:#f92672">||</span> <span style="color:#66d9ef">self</span>.contains(.wasmFunction)
+</span></span><span style="display:flex;"><span>}</span></span></code></pre></div></div>
+<p> </p>
+<ul>
+<li><code>isValueBuildableContext</code>
+<ul>
+<li>Determines whether a <code>ValueGenerator</code> (an instruction that creates a new variable) can be used in this context.</li>
+<li>This means that meaningful values can only be generated inside standard JavaScript or WASM functions (e.g., initialization, variable declarations, etc.).</li>
+</ul>
+</li>
+<li><code>inWasm</code>
+<ul>
+<li>Indicates whether the current context is related to WASM.</li>
+<li>Returns <code>true</code> if either <code>.wasm</code> (the entire WASM module) or <code>.wasmFunction</code> (a specific function within the module) is set.</li>
+</ul>
+</li>
+</ul>
+<p> </p>
+
+<h2 id="4-how-to-use-overview">
+  4. How to Use Overview
+  <a href="#4-how-to-use-overview" class="hanchor" ariaLabel="Anchor"></a>
+</h2>
+<p> </p>
+<ul>
+<li><strong>Context Updates</strong>
+<ul>
+<li>Example: When a <code>BeginLoop</code> instruction appears, the <code>.loop</code> flag is turned on; it is turned off at <code>EndLoop</code>.</li>
+<li>Similarly, <code>BeginFunction</code> → <code>.subroutine</code>, <code>BeginAsyncFunction</code> → <code>.asyncFunction | .subroutine</code>, etc.</li>
+<li>In this way, the FuzzIL code generator or analyzer (<code>ContextAnalyzer</code>) updates the <code>Context</code> by pushing/popping or unioning/removing flags depending on the instructions (e.g., start/end of blocks).</li>
+</ul>
+</li>
+<li><strong>Syntactic Constraints</strong>
+<ul>
+<li>When FuzzIL generates JavaScript code, it performs checks like “only emit a <code>yield</code> if currently in a <code>.generatorFunction</code> context.”</li>
+<li>Example:</li>
+</ul>
+
+<div class="highlight-wrapper">
+  <div class="highlight-toolbar">
+    <span class="item">
+      <span class="label">Lang:</span>
+      <span class="name">swift</span>
+    </span>
+
+
+    <button class="item right outline brighter hide js-btn-copy-code">Copy</button>
+  </div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-swift" data-lang="swift"><span style="display:flex;"><span><span style="color:#66d9ef">if</span> context.contains(.asyncFunction) {
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// allow &#39;await&#39; expression</span>
+</span></span><span style="display:flex;"><span>}</span></span></code></pre></div></div>
+<ul>
+<li>In this way, FuzzIL <strong>actively enforces syntax that is only valid within specific contexts</strong>, minimizing unnecessary exceptions.</li>
+<li><strong>Code Optimization/Analysis</strong>
+<ul>
+<li>Example: The Minimizer may remove a <code>break</code> statement if it is found outside a loop block — a form of context-based optimization logic.</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<p> </p>
+
+<h2 id="5-summary">
+  5. Summary
+  <a href="#5-summary" class="hanchor" ariaLabel="Anchor"></a>
+</h2>
+<ul>
+<li>In FuzzIL, <code>Context</code> is a <strong>set of options expressed as a bitmask</strong> that represents the environment (context) in which a given piece of code is executed.</li>
+<li>Each flag (such as <code>.javascript</code>, <code>.asyncFunction</code>, <code>.loop</code>, <code>.wasm</code>, etc.) directly corresponds to the availability of specific JavaScript/WASM syntax features (functions, loops, switch-case, etc.).</li>
+<li>This allows FuzzIL to <strong>precisely control what syntax is allowed in the current context</strong>, reducing the generation of invalid constructs and <strong>ensuring valid code is produced</strong>.</li>
+<li>For example, a <code>return</code> statement is only allowed inside a JavaScript function body (<code>.subroutine</code>), and <code>await</code> is only valid inside an async function (<code>.asyncFunction</code>) — allowing <strong>context-aware branching</strong>.</li>
+</ul>
+<p> </p>
+<blockquote>
+<p>In summary, <code>Context</code> is a critical option set that enables FuzzIL to manage its entire code generation process in a context-sensitive manner. It ensures that various features of JavaScript and WASM can be fuzzed <strong>safely and correctly</strong>, always within valid syntax boundaries.</p></blockquote>
+
+      </div>
+
+
+    <footer class="post-footer"><div class="pagination">
+    <div class="pagination-title">
+      <span class="pagination-title-h">Read other posts</span>
+      <hr />
+    </div>
+    <div class="buttons fill">
+        <a href="https://rpc.kr/posts/fuzzilli-ir-code-based-research/" class="button right">
+          <span class="label">Fuzzilli IR Code Based Research Introduction</span>
+          <span class="icon right">&rArr;</span>
+        </a>
+    </div>
+  </div>
+
+    </footer>
+  </article>
+        </main>
+        <footer class="site-footer">
+<p class="buildinfo">
+  <time datetime="2025-04-05 00:22:20 KST">Site built on: 2025-04-05 00:22:20 KST</time>
+</p>
+<div class="copyright">
+  <p></p>
+  <nav class="navbar">
+    <ul class="navbar__list">
+      <li><a href="https://rpc.kr/posts/index.xml">RSS</a></li>
+      <li><a href="https://rpc.kr/sitemap.xml">Sitemap</a></li>
+    </ul>
+  </nav>
+</div>
+<p class="themeinfo">Powered by <a href="https://gohugo.io">Hugo</a>, using theme <a href="https://manid2.github.io/hugo-xterm/">Hugo Xterm</a>.</p>
+</footer>
+      </div>
+    </div><script type="text/javascript" src="/bundle.min.js"></script>
+</body>
+</html>
