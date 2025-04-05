@@ -470,185 +470,1106 @@
   <a href="#operationswift" class="hanchor" ariaLabel="Anchor"></a>
 </h1>
 <hr>
-<p> </p>
 
 <div class="highlight-wrapper">
   <div class="highlight-toolbar">
     <span class="item">
       <span class="label">Lang:</span>
-      <span class="name">swfit</span>
+      <span class="name">swift</span>
     </span>
 
 
     <button class="item right outline brighter hide js-btn-copy-code">Copy</button>
-  </div><pre tabindex="0"><code class="language-swfit" data-lang="swfit">// Copyright 2022 Google LLC
-//
-// Licensed under the Apache License, Version 2.0 (the &#34;License&#34;);
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-// https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an &#34;AS IS&#34; BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
-/// An operation in the FuzzIL language.
-///
-/// Operations can be shared between different programs since they do not contain any
-/// program specific data.
-public class Operation {
-    /// The context in which the operation can exist
-    final let requiredContext: Context
-
-    /// The context that this operations opens
-    final let contextOpened: Context
-
-    /// The attributes of this operation.
-    final let attributes: Attributes
-
-    /// The number of input variables to this operation.
-    private let numInputs_: UInt16
-    final var numInputs: Int {
-        return Int(numInputs_)
-    }
-
-    /// The number of newly created variables in the current scope.
-    private let numOutputs_: UInt16
-    final var numOutputs: Int {
-        return Int(numOutputs_)
-    }
-
-    /// The number of newly created variables in the inner scope if one is created.
-    private let numInnerOutputs_: UInt16
-    final var numInnerOutputs: Int {
-        return Int(numInnerOutputs_)
-    }
-
-    /// The index of the first variadic input.
-    private let firstVariadicInput_: UInt16
-    final var firstVariadicInput: Int {
-        assert(attributes.contains(.isVariadic))
-        return Int(firstVariadicInput_)
-    }
-
-    /// The opcode for this operation.
-    ///
-    /// Use this to determine the type of the operation as it is significantly more efficient than type checks using the &#34;is&#34; or &#34;as&#34; operators.
-    var opcode: Opcode {
-        fatalError(&#34;Operations must override the opcode getter. \(self.name) does not&#34;)
-    }
-
-    init(numInputs: Int = 0, numOutputs: Int = 0, numInnerOutputs: Int = 0, firstVariadicInput: Int = -1, attributes: Attributes = [], requiredContext: Context = .empty, contextOpened: Context = .empty) {
-        assert(attributes.contains(.isVariadic) == (firstVariadicInput != -1))
-        assert(firstVariadicInput == -1 || firstVariadicInput &lt;= numInputs)
-        assert(contextOpened == .empty || attributes.contains(.isBlockStart))
-        self.attributes = attributes
-        self.requiredContext = requiredContext
-        self.contextOpened = contextOpened
-        self.numInputs_ = UInt16(numInputs)
-        self.numOutputs_ = UInt16(numOutputs)
-        self.numInnerOutputs_ = UInt16(numInnerOutputs)
-        self.firstVariadicInput_ = attributes.contains(.isVariadic) ? UInt16(firstVariadicInput) : 0
-    }
-
-    /// Possible attributes of an operation.
-    struct Attributes: OptionSet {
-        let rawValue: UInt16
-
-        // This operation can be mutated in a meaningful way.
-        // The rough rule of thumbs is that every Operation subclass that has
-        // additional members should be mutable. Example include integer values
-        // (LoadInteger), string values (GetProperty and CallMethod), or Arrays
-        // (CallFunctionWithSpread).
-        // However, if mutations are not interesting or meaningful, or if the
-        // value space is very small (e.g. a boolean), it may make sense to not
-        // make the operation mutable to not degrade mutation performance (by
-        // causing many meaningless mutations). An example of such an exception
-        // is the isStrict member of function definitions: the value space is two
-        // (true or false) and mutating the isStrict member is probably not very
-        // interesting compared to mutations on other operations.
-        static let isMutable                    = Attributes(rawValue: 1 &lt;&lt; 0)
-
-        // The operation performs a subroutine call.
-        static let isCall                       = Attributes(rawValue: 1 &lt;&lt; 1)
-
-        // The operation is the start of a block.
-        static let isBlockStart                 = Attributes(rawValue: 1 &lt;&lt; 2)
-
-        // The operation is the end of a block.
-        static let isBlockEnd                   = Attributes(rawValue: 1 &lt;&lt; 3)
-
-        // The operation is used for internal purposes and should not
-        // be visible to the user (e.g. appear in emitted samples).
-        static let isInternal                   = Attributes(rawValue: 1 &lt;&lt; 4)
-
-        // The operation behaves like an (unconditional) jump. Any
-        // code until the next block end is therefore dead code.
-        static let isJump                       = Attributes(rawValue: 1 &lt;&lt; 5)
-
-        // The operation can take a variable number of inputs.
-        // The firstVariadicInput contains the index of the first variadic input.
-        static let isVariadic                   = Attributes(rawValue: 1 &lt;&lt; 6)
-
-        // This operation should occur at most once in its surrounding context.
-        // If there are multiple singular operations in the same context, then
-        // all but the first one are ignored (i.e. they are dead code).
-        // Examples for singular operations include the default switch case or
-        // a class constructor.
-        // We could also fobrid having multiple singular operations in the same
-        // block instead of ignoring all but the first one. However, that would
-        // complicate code generation and splicing which cannot generally
-        // uphold this property.
-        static let isSingular                   = Attributes(rawValue: 1 &lt;&lt; 7)
-
-        // The operation propagates the surrounding context.
-        // Most control-flow operations keep their surrounding context active.
-        static let propagatesSurroundingContext = Attributes(rawValue: 1 &lt;&lt; 8)
-
-        // The instruction resumes the context from before its parent context.
-        // This is useful for example for BeginSwitch and BeginSwitchCase.
-        static let resumesSurroundingContext    = Attributes(rawValue: 1 &lt;&lt; 9)
-
-        // The instruction is a Nop operation.
-        static let isNop                        = Attributes(rawValue: 1 &lt;&lt; 10)
-
-        // The instruction cannot be mutated with the input mutator
-        // This is not the case for most instructions except wasm instructions where we need to
-        // preserve types for correctness. Note: this is different than the .isMutable attribute.
-        static let isNotInputMutable               = Attributes(rawValue: 1 &lt;&lt; 11)
-    }
-}
-
-final class Nop: Operation {
-    override var opcode: Opcode { .nop(self) }
-
-    // NOPs can have &#34;pseudo&#34; outputs. These should not be used by other instructions
-    // and they should not be present in the lifted code, i.e. a NOP should just be
-    // ignored during lifting.
-    // These pseudo outputs are used to simplify some algorithms, e.g. minimization,
-    // which needs to replace instructions with NOPs while keeping the variable numbers
-    // contiguous. They can also serve as placeholders for future instructions.
-    init(numOutputs: Int = 0) {
-        // We need an empty context here as .script is default and we want to be able to minimize in every context.
-        super.init(numOutputs: numOutputs, attributes: [.isNop])
-    }
-}
-
-
-// Expose the name of an operation as instance and class variable
-extension Operation {
-    var name: String {
-        return String(describing: type(of: self))
-    }
-
-    class var name: String {
-        return String(describing: self)
-    }
-}</code></pre></div>
+  </div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-swift" data-lang="swift"><span style="display:flex;"><span><span style="color:#75715e">// Copyright 2022 Google LLC</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">//</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// Licensed under the Apache License, Version 2.0 (the &#34;License&#34;);</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// you may not use this file except in compliance with the License.</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// You may obtain a copy of the License at</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">//</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// https://www.apache.org/licenses/LICENSE-2.0</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">//</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// Unless required by applicable law or agreed to in writing, software</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// distributed under the License is distributed on an &#34;AS IS&#34; BASIS,</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// See the License for the specific language governing permissions and</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// limitations under the License.</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">/// An operation in the FuzzIL language.</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">///</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">/// Operations can be shared between different programs since they do not contain any</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">/// program specific data.</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">public</span> <span style="color:#66d9ef">class</span> <span style="color:#a6e22e">Operation</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">/// The context in which the operation can exist</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">final</span> <span style="color:#66d9ef">let</span> requiredContext: Context
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">/// The context that this operations opens</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">final</span> <span style="color:#66d9ef">let</span> contextOpened: Context
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">/// The attributes of this operation.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">final</span> <span style="color:#66d9ef">let</span> attributes: Attributes
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">/// The number of input variables to this operation.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">private</span> <span style="color:#66d9ef">let</span> numInputs_: UInt16
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">final</span> <span style="color:#66d9ef">var</span> numInputs: Int {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> Int(numInputs_)
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">/// The number of newly created variables in the current scope.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">private</span> <span style="color:#66d9ef">let</span> numOutputs_: UInt16
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">final</span> <span style="color:#66d9ef">var</span> numOutputs: Int {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> Int(numOutputs_)
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">/// The number of newly created variables in the inner scope if one is created.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">private</span> <span style="color:#66d9ef">let</span> numInnerOutputs_: UInt16
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">final</span> <span style="color:#66d9ef">var</span> numInnerOutputs: Int {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> Int(numInnerOutputs_)
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">/// The index of the first variadic input.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">private</span> <span style="color:#66d9ef">let</span> firstVariadicInput_: UInt16
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">final</span> <span style="color:#66d9ef">var</span> firstVariadicInput: Int {
+</span></span><span style="display:flex;"><span>        assert(attributes.contains(.isVariadic))
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> Int(firstVariadicInput_)
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">/// The opcode for this operation.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">///</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">/// Use this to determine the type of the operation as it is significantly more efficient than type checks using the &#34;is&#34; or &#34;as&#34; operators.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">var</span> opcode: Opcode {
+</span></span><span style="display:flex;"><span>        fatalError(<span style="color:#e6db74">&#34;Operations must override the opcode getter. </span><span style="color:#e6db74">\(</span><span style="color:#66d9ef">self</span>.name<span style="color:#e6db74">)</span><span style="color:#e6db74"> does not&#34;</span>)
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">init</span>(numInputs: Int = <span style="color:#ae81ff">0</span>, numOutputs: Int = <span style="color:#ae81ff">0</span>, numInnerOutputs: Int = <span style="color:#ae81ff">0</span>, firstVariadicInput: Int = <span style="color:#f92672">-</span><span style="color:#ae81ff">1</span>, attributes: Attributes = [], requiredContext: Context = .empty, contextOpened: Context = .empty) {
+</span></span><span style="display:flex;"><span>        assert(attributes.contains(.isVariadic) == (firstVariadicInput <span style="color:#f92672">!=</span> <span style="color:#f92672">-</span><span style="color:#ae81ff">1</span>))
+</span></span><span style="display:flex;"><span>        assert(firstVariadicInput == <span style="color:#f92672">-</span><span style="color:#ae81ff">1</span> <span style="color:#f92672">||</span> firstVariadicInput <span style="color:#f92672">&lt;=</span> numInputs)
+</span></span><span style="display:flex;"><span>        assert(contextOpened == .empty <span style="color:#f92672">||</span> attributes.contains(.isBlockStart))
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">self</span>.attributes = attributes
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">self</span>.requiredContext = requiredContext
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">self</span>.contextOpened = contextOpened
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">self</span>.numInputs_ = UInt16(numInputs)
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">self</span>.numOutputs_ = UInt16(numOutputs)
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">self</span>.numInnerOutputs_ = UInt16(numInnerOutputs)
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">self</span>.firstVariadicInput_ = attributes.contains(.isVariadic) ? UInt16(firstVariadicInput) : <span style="color:#ae81ff">0</span>
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">/// Possible attributes of an operation.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">struct</span> <span style="color:#a6e22e">Attributes</span>: OptionSet {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">let</span> rawValue: UInt16
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e">// This operation can be mutated in a meaningful way.</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e">// The rough rule of thumbs is that every Operation subclass that has</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e">// additional members should be mutable. Example include integer values</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e">// (LoadInteger), string values (GetProperty and CallMethod), or Arrays</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e">// (CallFunctionWithSpread).</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e">// However, if mutations are not interesting or meaningful, or if the</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e">// value space is very small (e.g. a boolean), it may make sense to not</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e">// make the operation mutable to not degrade mutation performance (by</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e">// causing many meaningless mutations). An example of such an exception</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e">// is the isStrict member of function definitions: the value space is two</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e">// (true or false) and mutating the isStrict member is probably not very</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e">// interesting compared to mutations on other operations.</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">static</span> <span style="color:#66d9ef">let</span> isMutable                    = Attributes(rawValue: <span style="color:#ae81ff">1</span> <span style="color:#f92672">&lt;&lt;</span> <span style="color:#ae81ff">0</span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e">// The operation performs a subroutine call.</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">static</span> <span style="color:#66d9ef">let</span> isCall                       = Attributes(rawValue: <span style="color:#ae81ff">1</span> <span style="color:#f92672">&lt;&lt;</span> <span style="color:#ae81ff">1</span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e">// The operation is the start of a block.</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">static</span> <span style="color:#66d9ef">let</span> isBlockStart                 = Attributes(rawValue: <span style="color:#ae81ff">1</span> <span style="color:#f92672">&lt;&lt;</span> <span style="color:#ae81ff">2</span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e">// The operation is the end of a block.</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">static</span> <span style="color:#66d9ef">let</span> isBlockEnd                   = Attributes(rawValue: <span style="color:#ae81ff">1</span> <span style="color:#f92672">&lt;&lt;</span> <span style="color:#ae81ff">3</span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e">// The operation is used for internal purposes and should not</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e">// be visible to the user (e.g. appear in emitted samples).</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">static</span> <span style="color:#66d9ef">let</span> isInternal                   = Attributes(rawValue: <span style="color:#ae81ff">1</span> <span style="color:#f92672">&lt;&lt;</span> <span style="color:#ae81ff">4</span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e">// The operation behaves like an (unconditional) jump. Any</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e">// code until the next block end is therefore dead code.</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">static</span> <span style="color:#66d9ef">let</span> isJump                       = Attributes(rawValue: <span style="color:#ae81ff">1</span> <span style="color:#f92672">&lt;&lt;</span> <span style="color:#ae81ff">5</span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e">// The operation can take a variable number of inputs.</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e">// The firstVariadicInput contains the index of the first variadic input.</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">static</span> <span style="color:#66d9ef">let</span> isVariadic                   = Attributes(rawValue: <span style="color:#ae81ff">1</span> <span style="color:#f92672">&lt;&lt;</span> <span style="color:#ae81ff">6</span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e">// This operation should occur at most once in its surrounding context.</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e">// If there are multiple singular operations in the same context, then</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e">// all but the first one are ignored (i.e. they are dead code).</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e">// Examples for singular operations include the default switch case or</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e">// a class constructor.</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e">// We could also fobrid having multiple singular operations in the same</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e">// block instead of ignoring all but the first one. However, that would</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e">// complicate code generation and splicing which cannot generally</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e">// uphold this property.</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">static</span> <span style="color:#66d9ef">let</span> isSingular                   = Attributes(rawValue: <span style="color:#ae81ff">1</span> <span style="color:#f92672">&lt;&lt;</span> <span style="color:#ae81ff">7</span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e">// The operation propagates the surrounding context.</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e">// Most control-flow operations keep their surrounding context active.</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">static</span> <span style="color:#66d9ef">let</span> propagatesSurroundingContext = Attributes(rawValue: <span style="color:#ae81ff">1</span> <span style="color:#f92672">&lt;&lt;</span> <span style="color:#ae81ff">8</span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e">// The instruction resumes the context from before its parent context.</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e">// This is useful for example for BeginSwitch and BeginSwitchCase.</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">static</span> <span style="color:#66d9ef">let</span> resumesSurroundingContext    = Attributes(rawValue: <span style="color:#ae81ff">1</span> <span style="color:#f92672">&lt;&lt;</span> <span style="color:#ae81ff">9</span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e">// The instruction is a Nop operation.</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">static</span> <span style="color:#66d9ef">let</span> isNop                        = Attributes(rawValue: <span style="color:#ae81ff">1</span> <span style="color:#f92672">&lt;&lt;</span> <span style="color:#ae81ff">10</span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e">// The instruction cannot be mutated with the input mutator</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e">// This is not the case for most instructions except wasm instructions where we need to</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e">// preserve types for correctness. Note: this is different than the .isMutable attribute.</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">static</span> <span style="color:#66d9ef">let</span> isNotInputMutable               = Attributes(rawValue: <span style="color:#ae81ff">1</span> <span style="color:#f92672">&lt;&lt;</span> <span style="color:#ae81ff">11</span>)
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">final</span> <span style="color:#66d9ef">class</span> <span style="color:#a6e22e">Nop</span>: Operation {
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">override</span> <span style="color:#66d9ef">var</span> opcode: Opcode { .nop(<span style="color:#66d9ef">self</span>) }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// NOPs can have &#34;pseudo&#34; outputs. These should not be used by other instructions</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// and they should not be present in the lifted code, i.e. a NOP should just be</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// ignored during lifting.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// These pseudo outputs are used to simplify some algorithms, e.g. minimization,</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// which needs to replace instructions with NOPs while keeping the variable numbers</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// contiguous. They can also serve as placeholders for future instructions.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">init</span>(numOutputs: Int = <span style="color:#ae81ff">0</span>) {
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e">// We need an empty context here as .script is default and we want to be able to minimize in every context.</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">super</span>.<span style="color:#66d9ef">init</span>(numOutputs: numOutputs, attributes: [.isNop])
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// Expose the name of an operation as instance and class variable</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">extension</span> <span style="color:#a6e22e">Operation</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">var</span> name: String {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> String(describing: type(of: <span style="color:#66d9ef">self</span>))
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">class</span> <span style="color:#a6e22e">var</span> name: String {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> String(describing: <span style="color:#66d9ef">self</span>)
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>}</span></span></code></pre></div></div>
 <p> </p>
+<p><strong>This class serves as the abstract foundation for representing a single operation in the FuzzIL language.</strong></p>
+<p>Each concrete operation (e.g., loading an integer, calling a function, beginning a for loop, etc.) inherits from this class. Subclasses implement <code>override var opcode</code> to indicate &ldquo;which kind of operation this instance represents.&rdquo;</p>
+<p>This design allows FuzzIL to handle operation types, input/output counts, and context-handling behaviors in a consistent and structured way.</p>
+
+<h3 id="summary">
+  Summary
+  <a href="#summary" class="hanchor" ariaLabel="Anchor"></a>
+</h3>
+<ul>
+<li>The <code>Operation</code> class is the base abstraction for <strong>the information associated with a single operation in FuzzIL</strong>.</li>
+<li>Concrete operations (e.g., <code>LoadInteger</code>) inherit from this class and implement properties such as <code>override var opcode</code>.</li>
+</ul>
+<p> </p>
+
+<h2 id="key-properties">
+  Key Properties
+  <a href="#key-properties" class="hanchor" ariaLabel="Anchor"></a>
+</h2>
+<p> </p>
+<ul>
+<li>
+<p><code>requiredContext</code>, <code>contextOpened</code></p>
+<ul>
+<li>Define how the operation <strong>interacts with the current execution context</strong>, and whether it <strong>opens a new context</strong>.</li>
+<li>For example, some operations may only be valid &ldquo;within a loop&rdquo; or &ldquo;inside a function,&rdquo; while others may <strong>introduce a new context</strong>, such as beginning a new function block.</li>
+</ul>
+</li>
+<li>
+<p><code>attributes</code></p>
+<ul>
+<li>Encodes the <strong>characteristics</strong> and <strong>constraints</strong> of an operation using the <code>Attributes OptionSet</code>.</li>
+<li>Notable flags include:
+<ul>
+<li>
+<p><code>.isMutable</code>:</p>
+<ul>
+<li>Indicates the operation can be <strong>mutated</strong> during fuzzing.</li>
+<li>For example, <code>LoadInteger</code> contains internal values that can be meaningfully changed.</li>
+</ul>
+</li>
+<li>
+<p><code>.isCall</code>:</p>
+<ul>
+<li>Marks operations that involve <strong>function calls</strong>.</li>
+</ul>
+</li>
+<li>
+<p><code>.isBlockStart</code> / <code>.isBlockEnd</code>:</p>
+<ul>
+<li>Used for operations that <strong>begin or end control-flow blocks</strong>.</li>
+<li>For example: <code>.isBlockStart</code> for <code>BeginWhileLoopHeader</code>, <code>.isBlockEnd</code> for <code>EndWhileLoop</code>.</li>
+</ul>
+</li>
+<li>
+<p><code>.isJump</code>:</p>
+<ul>
+<li>Marks control-flow operations that may render subsequent code <strong>unreachable</strong>, such as <code>Return</code> or <code>ThrowException</code>.</li>
+</ul>
+</li>
+<li>
+<p><code>.isVariadic</code>:</p>
+<ul>
+<li>Indicates the operation accepts <strong>a variable number of inputs</strong>. In such cases, <code>firstVariadicInput</code> specifies where the variadic segment begins.</li>
+</ul>
+</li>
+<li>
+<p><code>.isSingular</code>:</p>
+<ul>
+<li>Enforces that the operation must be <strong>unique within its context</strong>, e.g., a class constructor.</li>
+</ul>
+</li>
+<li>
+<p><code>.isNop</code>:</p>
+<ul>
+<li>Flags the operation as a <strong>no-op</strong>.</li>
+</ul>
+</li>
+<li>
+<p><code>.isNotInputMutable</code>:</p>
+<ul>
+<li>Prevents the fuzzer from mutating <strong>input variables</strong>.</li>
+<li>Especially relevant for WASM operations where <strong>type safety</strong> must be preserved.</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>
+<p><code>numInputs</code> / <code>numOutputs</code> / <code>numInnerOutputs</code></p>
+<ul>
+<li>Define how many <strong>input variables</strong> the operation consumes and how many <strong>output variables</strong> it produces (some of which may be <strong>inner-scope</strong> only).
+<ul>
+<li>Example: LoadInteger → “0 inputs, 1 output”</li>
+<li>Example: BeginFunction → “1 function object (visible externally), n parameters (scoped internally)”</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>
+<p><code>firstVariadicInput</code></p>
+<ul>
+<li>Only valid for operations with the <code>.isVariadic</code> flag.</li>
+<li>Helps distinguish between <strong>fixed and variadic</strong> parts of the input. For example, a function call might have fixed arguments followed by a variadic tail.</li>
+</ul>
+</li>
+<li>
+<p><code>opcode: Opcode</code></p>
+<ul>
+<li>Returns the <code>Opcode</code> enum case representing this operation.</li>
+<li>Typically implemented in subclasses as <code>override var opcode: Opcode { .loadInteger(self) }</code>, etc.</li>
+<li>The presence of <code>fatalError</code> in the base class ensures that this property <strong>must be overridden</strong> by any concrete subclass.</li>
+</ul>
+</li>
+</ul>
+
+<h2 id="constructor">
+  Constructor
+  <a href="#constructor" class="hanchor" ariaLabel="Anchor"></a>
+</h2>
+
+<div class="highlight-wrapper">
+  <div class="highlight-toolbar">
+    <span class="item">
+      <span class="label">Lang:</span>
+      <span class="name">swift</span>
+    </span>
+
+
+    <button class="item right outline brighter hide js-btn-copy-code">Copy</button>
+  </div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-swift" data-lang="swift"><span style="display:flex;"><span><span style="color:#66d9ef">init</span>(numInputs: Int = <span style="color:#ae81ff">0</span>, numOutputs: Int = <span style="color:#ae81ff">0</span>, numInnerOutputs: Int = <span style="color:#ae81ff">0</span>, firstVariadicInput: Int = <span style="color:#f92672">-</span><span style="color:#ae81ff">1</span>, attributes: Attributes = [], requiredContext: Context = .empty, contextOpened: Context = .empty) {
+</span></span><span style="display:flex;"><span>        assert(attributes.contains(.isVariadic) == (firstVariadicInput <span style="color:#f92672">!=</span> <span style="color:#f92672">-</span><span style="color:#ae81ff">1</span>))
+</span></span><span style="display:flex;"><span>        assert(firstVariadicInput == <span style="color:#f92672">-</span><span style="color:#ae81ff">1</span> <span style="color:#f92672">||</span> firstVariadicInput <span style="color:#f92672">&lt;=</span> numInputs)
+</span></span><span style="display:flex;"><span>        assert(contextOpened == .empty <span style="color:#f92672">||</span> attributes.contains(.isBlockStart))
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">self</span>.attributes = attributes
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">self</span>.requiredContext = requiredContext
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">self</span>.contextOpened = contextOpened
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">self</span>.numInputs_ = UInt16(numInputs)
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">self</span>.numOutputs_ = UInt16(numOutputs)
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">self</span>.numInnerOutputs_ = UInt16(numInnerOutputs)
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">self</span>.firstVariadicInput_ = attributes.contains(.isVariadic) ? UInt16(firstVariadicInput) : <span style="color:#ae81ff">0</span>
+</span></span><span style="display:flex;"><span>    }</span></span></code></pre></div></div>
+<p> </p>
+<ul>
+<li>
+<p>The object is initialized with information such as the <strong>number of input/output variables</strong>, the index <strong>where variadic inputs begin, attributes</strong>, and <strong>context constraints</strong>.</p>
+</li>
+<li>
+<p>Internally, it uses <code>assert</code> statements to enforce invariants—for example:
+<em>“If the operation is variadic, then firstVariadicInput must not be -1.”</em></p>
+</li>
+</ul>
+<p> </p>
+<blockquote>
+<p>Each Operation instance fully encapsulates information such as &ldquo;the context in which it is valid&rdquo;, &ldquo;the number of inputs and outputs&rdquo;, &ldquo;and what attributes it possesses&rdquo;.</p></blockquote>
+<p> </p>
+
+<h2 id="nop">
+  Nop
+  <a href="#nop" class="hanchor" ariaLabel="Anchor"></a>
+</h2>
+
+<div class="highlight-wrapper">
+  <div class="highlight-toolbar">
+    <span class="item">
+      <span class="label">Lang:</span>
+      <span class="name">swift</span>
+    </span>
+
+
+    <button class="item right outline brighter hide js-btn-copy-code">Copy</button>
+  </div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-swift" data-lang="swift"><span style="display:flex;"><span><span style="color:#66d9ef">final</span> <span style="color:#66d9ef">class</span> <span style="color:#a6e22e">Nop</span>: Operation {
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">override</span> <span style="color:#66d9ef">var</span> opcode: Opcode { .nop(<span style="color:#66d9ef">self</span>) }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">init</span>(numOutputs: Int = <span style="color:#ae81ff">0</span>) {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">super</span>.<span style="color:#66d9ef">init</span>(numOutputs: numOutputs, attributes: [.isNop])
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>}</span></span></code></pre></div></div>
+<p> </p>
+<blockquote>
+<p>The <code>Nop</code> operation represents an instruction that does nothing. Internally, its <code>opcode</code> is mapped to <code>.nop(self)</code>.</p></blockquote>
+<p> </p>
+<p>It provides a default value of <code>numOutputs: Int = 0</code>, but it <strong>can be configured to produce outputs</strong> if necessary.</p>
+<p>While a <code>Nop</code> <strong>can have pseudo outputs</strong>, these must <strong>not be used by other instructions</strong>, and they must <strong>not appear in the lifted code</strong>. Instead, they serve the following purpose:
+- During <strong>code transformation phases</strong> (e.g., in the Minimizer), it is useful for <strong>temporarily disabling instructions</strong> or <strong>preserving structural placeholders</strong> for future operations.
+- For example, when the Minimizer replaces a specific instruction with a <code>Nop</code> but still needs to preserve the surrounding variable index structure.</p>
+<p> </p>
+<p>The <em><code>Operation</code></em> class defines the <strong>abstract common interface</strong> for all instructions in FuzzIL. It centralizes information such as <strong>how many variables an instruction takes or produces</strong>, <strong>what context it requires or opens, and whether it is eligible for mutation</strong>.</p>
+<p>The <code>Nop</code> operation is functionally &ldquo;empty,&rdquo; but it plays a crucial role in <strong>code transformation</strong> by offering <strong>more flexibility than simply removing instructions</strong>.
+- For example, when the Minimizer replaces an instruction with a <code>Nop</code>, it helps preserve the <strong>overall variable index structure</strong>, ensuring that the program remains structurally valid and analyzable.</p>
+<p> </p>
+
+<h1 id="programswift">
+  Program.swift
+  <a href="#programswift" class="hanchor" ariaLabel="Anchor"></a>
+</h1>
+<hr>
+
+<div class="highlight-wrapper">
+  <div class="highlight-toolbar">
+    <span class="item">
+      <span class="label">Lang:</span>
+      <span class="name">swift</span>
+    </span>
+
+
+    <button class="item right outline brighter hide js-btn-copy-code">Copy</button>
+  </div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-swift" data-lang="swift"><span style="display:flex;"><span><span style="color:#75715e">// Copyright 2019 Google LLC</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">//</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// Licensed under the Apache License, Version 2.0 (the &#34;License&#34;);</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// you may not use this file except in compliance with the License.</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// You may obtain a copy of the License at</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">//</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// https://www.apache.org/licenses/LICENSE-2.0</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">//</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// Unless required by applicable law or agreed to in writing, software</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// distributed under the License is distributed on an &#34;AS IS&#34; BASIS,</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// See the License for the specific language governing permissions and</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// limitations under the License.</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">import</span> <span style="color:#a6e22e">Foundation</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">/// Immutable unit of code that can, amongst others, be lifted, executed, scored, (de)serialized, and serve as basis for mutations.</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">///</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">/// A Program&#39;s code is guaranteed to have a number of static properties, as checked by code.isStaticallyValid():</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">/// * All input variables must have previously been defined</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">/// * Variables have increasing numbers starting at zero and there are no holes</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">/// * Variables are only used while they are visible (the block they were defined in is still active)</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">/// * Blocks are balanced and the opening and closing operations match (e.g. BeginIf is closed by EndIf)</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">/// * The outputs of an instruction are always new variables and never overwrite an existing variable</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">///</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">public</span> <span style="color:#66d9ef">final</span> <span style="color:#66d9ef">class</span> <span style="color:#a6e22e">Program</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">/// The immutable code of this program.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">let</span> code: Code
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">/// The parent program that was used to construct this program.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">/// This is mostly only used when inspection mode is enabled to reconstruct</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">/// the &#34;history&#34; of a program.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">private</span>(<span style="color:#66d9ef">set</span>) <span style="color:#66d9ef">var</span> parent: Program? = <span style="color:#66d9ef">nil</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">/// Comments attached to this program.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">var</span> comments = ProgramComments()
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">/// Everything that contributed to this program. This is not preserved across protobuf serialization.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">var</span> contributors = Contributors()
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">/// Each program has a unique ID to identify it even accross different fuzzer instances.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">private</span>(<span style="color:#66d9ef">set</span>) <span style="color:#66d9ef">lazy</span> <span style="color:#66d9ef">var</span> id = UUID()
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">/// Constructs an empty program.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">init</span>() {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">self</span>.code = Code()
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">self</span>.parent = <span style="color:#66d9ef">nil</span>
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">/// Constructs a program with the given code. The code must be statically valid.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">init</span>(with code: Code) {
+</span></span><span style="display:flex;"><span>        assert(code.isStaticallyValid())
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">self</span>.code = code
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">/// Construct a program with the given code and type information.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">convenience</span> <span style="color:#66d9ef">init</span>(code: Code, parent: Program? = <span style="color:#66d9ef">nil</span>, comments: ProgramComments = ProgramComments(), contributors: Contributors = Contributors()) {
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e">// We should never see instructions with set flags here, as Flags are currently only used temporarily (e.g. Minimizer)</span>
+</span></span><span style="display:flex;"><span>        assert(code.allSatisfy { instr <span style="color:#66d9ef">in</span> instr.flags == Instruction.Flags.empty })
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">self</span>.<span style="color:#66d9ef">init</span>(with: code)
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">self</span>.comments = comments
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">self</span>.contributors = contributors
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">self</span>.parent = parent
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">/// The number of instructions in this program.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">var</span> size: Int {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> code.count
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">/// Indicates whether this program is empty.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">var</span> isEmpty: Bool {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> size == <span style="color:#ae81ff">0</span>
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">func</span> <span style="color:#a6e22e">clearParent</span>() {
+</span></span><span style="display:flex;"><span>        parent = <span style="color:#66d9ef">nil</span>
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// Create and return a deep copy of this program.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">func</span> <span style="color:#a6e22e">copy</span>() -&gt; Program {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">let</span> proto = <span style="color:#66d9ef">self</span>.asProtobuf()
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> <span style="color:#66d9ef">try</span>! Program(from: proto)
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">var</span> containsWasm: Bool {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">for</span> instr <span style="color:#66d9ef">in</span> code {
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">if</span> instr.op <span style="color:#66d9ef">is</span> WasmOperation {
+</span></span><span style="display:flex;"><span>                <span style="color:#66d9ef">return</span> <span style="color:#66d9ef">true</span>
+</span></span><span style="display:flex;"><span>            }
+</span></span><span style="display:flex;"><span>        }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> <span style="color:#66d9ef">false</span>
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">/// This function can be invoked from the debugger to store a program that throws an assertion to disk.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">/// The idea is to then use the FuzzILTool to lift the program, which can help debug Fuzzilli issues.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">func</span> <span style="color:#a6e22e">storeToDisk</span>(atPath path: String) {
+</span></span><span style="display:flex;"><span>        assert(path.hasSuffix(<span style="color:#e6db74">&#34;.fzil&#34;</span>))
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">do</span> {
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">let</span> pb = <span style="color:#66d9ef">try</span> <span style="color:#66d9ef">self</span>.asProtobuf().serializedData()
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">let</span> url = URL(fileURLWithPath: path)
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">try</span> pb.write(to: url)
+</span></span><span style="display:flex;"><span>        } <span style="color:#66d9ef">catch</span> {
+</span></span><span style="display:flex;"><span>            fatalError(<span style="color:#e6db74">&#34;Failed to serialize program to protobuf: </span><span style="color:#e6db74">\(</span>error<span style="color:#e6db74">)</span><span style="color:#e6db74">&#34;</span>)
+</span></span><span style="display:flex;"><span>        }
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">/// This convienience initializer helps to load a program from disk. This can be helpful for debugging purposes.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">convenience</span> <span style="color:#66d9ef">init</span>(fromPath path: String) {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">do</span> {
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">let</span> data = <span style="color:#66d9ef">try</span> Data(contentsOf: URL(fileURLWithPath: path))
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">let</span> pb = <span style="color:#66d9ef">try</span> Fuzzilli_Protobuf_Program(serializedBytes: data)
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">try</span> <span style="color:#66d9ef">self</span>.<span style="color:#66d9ef">init</span>(from: pb)
+</span></span><span style="display:flex;"><span>        } <span style="color:#66d9ef">catch</span> {
+</span></span><span style="display:flex;"><span>            fatalError(<span style="color:#e6db74">&#34;Failed to create program from protobuf: </span><span style="color:#e6db74">\(</span>error<span style="color:#e6db74">)</span><span style="color:#e6db74">&#34;</span>)
+</span></span><span style="display:flex;"><span>        }
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">extension</span> <span style="color:#a6e22e">Program</span>: ProtobufConvertible {
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">typealias</span> ProtobufType = Fuzzilli_Protobuf_Program
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">func</span> <span style="color:#a6e22e">asProtobuf</span>(opCache: OperationCache? = <span style="color:#66d9ef">nil</span>) -&gt; ProtobufType {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> ProtobufType.with {
+</span></span><span style="display:flex;"><span>            $0.uuid = id.uuidData
+</span></span><span style="display:flex;"><span>            $0.code = code.map({ $0.asProtobuf(with: opCache) })
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">if</span> <span style="color:#f92672">!</span>comments.isEmpty {
+</span></span><span style="display:flex;"><span>                $0.comments = comments.asProtobuf()
+</span></span><span style="display:flex;"><span>            }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">if</span> <span style="color:#66d9ef">let</span> parent = parent {
+</span></span><span style="display:flex;"><span>                $0.parent = parent.asProtobuf(opCache: opCache)
+</span></span><span style="display:flex;"><span>            }
+</span></span><span style="display:flex;"><span>        }
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">func</span> <span style="color:#a6e22e">asProtobuf</span>() -&gt; ProtobufType {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> asProtobuf(opCache: <span style="color:#66d9ef">nil</span>)
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">convenience</span> <span style="color:#66d9ef">init</span>(from proto: ProtobufType, opCache: OperationCache? = <span style="color:#66d9ef">nil</span>) <span style="color:#66d9ef">throws</span> {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">var</span> code = Code()
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">for</span> (i, protoInstr) <span style="color:#66d9ef">in</span> proto.code.enumerated() {
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">do</span> {
+</span></span><span style="display:flex;"><span>                code.append(<span style="color:#66d9ef">try</span> Instruction(from: protoInstr, with: opCache))
+</span></span><span style="display:flex;"><span>            } <span style="color:#66d9ef">catch</span> FuzzilliError.instructionDecodingError(<span style="color:#66d9ef">let</span> reason) {
+</span></span><span style="display:flex;"><span>                <span style="color:#66d9ef">throw</span> FuzzilliError.programDecodingError(<span style="color:#e6db74">&#34;could not decode instruction #</span><span style="color:#e6db74">\(</span>i<span style="color:#e6db74">)</span><span style="color:#e6db74">: </span><span style="color:#e6db74">\(</span>reason<span style="color:#e6db74">)</span><span style="color:#e6db74">&#34;</span>)
+</span></span><span style="display:flex;"><span>            }
+</span></span><span style="display:flex;"><span>        }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">do</span> {
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">try</span> code.check()
+</span></span><span style="display:flex;"><span>        } <span style="color:#66d9ef">catch</span> FuzzilliError.codeVerificationError(<span style="color:#66d9ef">let</span> reason) {
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">throw</span> FuzzilliError.programDecodingError(<span style="color:#e6db74">&#34;decoded code is not statically valid: </span><span style="color:#e6db74">\(</span>reason<span style="color:#e6db74">)</span><span style="color:#e6db74">&#34;</span>)
+</span></span><span style="display:flex;"><span>        }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">self</span>.<span style="color:#66d9ef">init</span>(code: code)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">if</span> <span style="color:#66d9ef">let</span> uuid = UUID(uuidData: proto.uuid) {
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">self</span>.id = uuid
+</span></span><span style="display:flex;"><span>        }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">self</span>.comments = ProgramComments(from: proto.comments)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">if</span> proto.hasParent {
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">self</span>.parent = <span style="color:#66d9ef">try</span> Program(from: proto.parent, opCache: opCache)
+</span></span><span style="display:flex;"><span>        }
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">convenience</span> <span style="color:#66d9ef">init</span>(from proto: ProtobufType) <span style="color:#66d9ef">throws</span> {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">try</span> <span style="color:#66d9ef">self</span>.<span style="color:#66d9ef">init</span>(from: proto, opCache: <span style="color:#66d9ef">nil</span>)
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>}</span></span></code></pre></div></div>
+<p> </p>
+
+<h2 id="program-class">
+  Program Class
+  <a href="#program-class" class="hanchor" ariaLabel="Anchor"></a>
+</h2>
+
+<div class="highlight-wrapper">
+  <div class="highlight-toolbar">
+    <span class="item">
+      <span class="label">Lang:</span>
+      <span class="name">swift</span>
+    </span>
+
+
+    <button class="item right outline brighter hide js-btn-copy-code">Copy</button>
+  </div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-swift" data-lang="swift"><span style="display:flex;"><span><span style="color:#66d9ef">public</span> <span style="color:#66d9ef">final</span> <span style="color:#66d9ef">class</span> <span style="color:#a6e22e">Program</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">let</span> code: Code
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">private</span>(<span style="color:#66d9ef">set</span>) <span style="color:#66d9ef">var</span> parent: Program? = <span style="color:#66d9ef">nil</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">var</span> comments = ProgramComments()
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">var</span> contributors = Contributors()
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">private</span>(<span style="color:#66d9ef">set</span>) <span style="color:#66d9ef">lazy</span> <span style="color:#66d9ef">var</span> id = UUID()
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">init</span>() {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">self</span>.code = Code()
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">self</span>.parent = <span style="color:#66d9ef">nil</span>
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>    ...
+</span></span><span style="display:flex;"><span>}</span></span></code></pre></div></div>
+<p> </p>
+<p>In FuzzIL, this represents a “<strong>self-contained chunk of code</strong>.” Internally, the core component is the <code>code: Code</code> property, which holds a <strong>list of instructions</strong>.</p>
+<p>In addition, it manages metadata such as the <strong>parent program</strong> (<code>parent</code>), <strong>comments</strong> (<code>comments</code>), <strong>contributors</strong> (<code>contributors</code>), and a unique <strong>identifier</strong> (<code>id</code>).</p>
+<p> </p>
+
+<h2 id="key-properties-1">
+  Key Properties
+  <a href="#key-properties-1" class="hanchor" ariaLabel="Anchor"></a>
+</h2>
+<ul>
+<li>
+<p><code>code: Code</code></p>
+<ul>
+<li>The actual <strong>sequence of instructions</strong> that make up the program (stored as an array).</li>
+<li>FuzzIL ensures <strong>static validity</strong> (e.g., proper opening and closing of variables and blocks) using <code>code.isStaticallyValid()</code>.</li>
+<li>The constructor enforces this validity with <code>assert(code.isStaticallyValid())</code>.</li>
+</ul>
+</li>
+<li>
+<p><code>parent: Program?</code></p>
+<ul>
+<li>Tracks <strong>which program this one was derived from</strong>.</li>
+<li>For example, during fuzzing, this may point to the “original” program used in a <strong>splice or mutation</strong>.</li>
+<li>Useful for debugging and validation—allows one to trace <strong>how a program was generated</strong>.</li>
+</ul>
+</li>
+<li>
+<p><code>comments: ProgramComments</code></p>
+<ul>
+<li>Stores <strong>annotations and additional information</strong> attached to the program.</li>
+<li>For example: “Coverage change was detected at this point,” or “An event occurred during this phase,” etc. Useful for developers and analysis tools.</li>
+</ul>
+</li>
+<li>
+<p><code>contributors: Contributors</code></p>
+<ul>
+<li>Records <strong>who or what contributed to generating this program</strong>.</li>
+<li>Not included in Protobuf serialization—kept locally only.</li>
+</ul>
+</li>
+<li>
+<p><code>id: UUID</code></p>
+<ul>
+<li>A <strong>unique identifier for the program</strong>.</li>
+<li>Ensures distinct identification during debugging or cross-session transfer.</li>
+<li>Declared as <code>lazy</code>, meaning <code>UUID()</code> is only generated when the <code>id</code> property is first accessed.</li>
+</ul>
+</li>
+</ul>
+<p> </p>
+
+<h2 id="constructor--set-property">
+  Constructor &amp; set property
+  <a href="#constructor--set-property" class="hanchor" ariaLabel="Anchor"></a>
+</h2>
+
+<div class="highlight-wrapper">
+  <div class="highlight-toolbar">
+    <span class="item">
+      <span class="label">Lang:</span>
+      <span class="name">swift</span>
+    </span>
+
+
+    <button class="item right outline brighter hide js-btn-copy-code">Copy</button>
+  </div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-swift" data-lang="swift"><span style="display:flex;"><span><span style="color:#66d9ef">public</span> <span style="color:#66d9ef">init</span>() {
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">self</span>.code = Code()
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">self</span>.parent = <span style="color:#66d9ef">nil</span>
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">public</span> <span style="color:#66d9ef">init</span>(with code: Code) {
+</span></span><span style="display:flex;"><span>    assert(code.isStaticallyValid())
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">self</span>.code = code
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">public</span> <span style="color:#66d9ef">convenience</span> <span style="color:#66d9ef">init</span>(code: Code, parent: Program? = <span style="color:#66d9ef">nil</span>, comments: ProgramComments = ProgramComments(), contributors: Contributors = Contributors()) {
+</span></span><span style="display:flex;"><span>    assert(code.allSatisfy { instr <span style="color:#66d9ef">in</span> instr.flags == Instruction.Flags.empty })
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">self</span>.<span style="color:#66d9ef">init</span>(with: code)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">self</span>.comments = comments
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">self</span>.contributors = contributors
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">self</span>.parent = parent
+</span></span><span style="display:flex;"><span>}</span></span></code></pre></div></div>
+<p> </p>
+<ul>
+<li><strong>Default</strong> <code>init()</code>
+<ul>
+<li>Initializes a program with an empty <code>Code()</code> (i.e., no instructions).
+The <code>parent</code> is set to <code>nil</code>.</li>
+</ul>
+</li>
+<li><code>init(with code: Code)</code>
+<ul>
+<li>Accepts a preconstructed <code>Code</code> object (a sequence of instructions).</li>
+<li>Performs validity checks using <code>assert</code>, then sets <code>self.code = code</code>.</li>
+</ul>
+</li>
+<li><code>init(code: Code, parent: Program?, comments: ProgramComments, contributors: Contributors = Contributors())</code>
+<ul>
+<li>A <strong>convenience initializer</strong> that allows setting <code>parent</code>, <code>comments</code>, and <code>contributors</code> in addition to <code>code</code>.</li>
+<li>During initialization, it ensures that <strong>no temporary flags are set on any of the instructions</strong> (i.e., all flags must be empty).</li>
+</ul>
+</li>
+</ul>
+<p> </p>
+
+<h2 id="exploring-properties-and-methods">
+  Exploring Properties and Methods
+  <a href="#exploring-properties-and-methods" class="hanchor" ariaLabel="Anchor"></a>
+</h2>
+
+<div class="highlight-wrapper">
+  <div class="highlight-toolbar">
+    <span class="item">
+      <span class="label">Lang:</span>
+      <span class="name">swift</span>
+    </span>
+
+
+    <button class="item right outline brighter hide js-btn-copy-code">Copy</button>
+  </div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-swift" data-lang="swift"><span style="display:flex;"><span><span style="color:#66d9ef">public</span> <span style="color:#66d9ef">var</span> size: Int {
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> code.count
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">public</span> <span style="color:#66d9ef">var</span> isEmpty: Bool {
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> size == <span style="color:#ae81ff">0</span>
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">public</span> <span style="color:#66d9ef">func</span> <span style="color:#a6e22e">clearParent</span>() {
+</span></span><span style="display:flex;"><span>    parent = <span style="color:#66d9ef">nil</span>
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">public</span> <span style="color:#66d9ef">func</span> <span style="color:#a6e22e">copy</span>() -&gt; Program {
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">let</span> proto = <span style="color:#66d9ef">self</span>.asProtobuf()
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> <span style="color:#66d9ef">try</span>! Program(from: proto)
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">public</span> <span style="color:#66d9ef">var</span> containsWasm: Bool {
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">for</span> instr <span style="color:#66d9ef">in</span> code {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">if</span> instr.op <span style="color:#66d9ef">is</span> WasmOperation {
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">return</span> <span style="color:#66d9ef">true</span>
+</span></span><span style="display:flex;"><span>        }
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> <span style="color:#66d9ef">false</span>
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">public</span> <span style="color:#66d9ef">func</span> <span style="color:#a6e22e">storeToDisk</span>(atPath path: String) {
+</span></span><span style="display:flex;"><span>    assert(path.hasSuffix(<span style="color:#e6db74">&#34;.fzil&#34;</span>))
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">do</span> {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">let</span> pb = <span style="color:#66d9ef">try</span> <span style="color:#66d9ef">self</span>.asProtobuf().serializedData()
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">let</span> url = URL(fileURLWithPath: path)
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">try</span> pb.write(to: url)
+</span></span><span style="display:flex;"><span>    } <span style="color:#66d9ef">catch</span> {
+</span></span><span style="display:flex;"><span>        fatalError(<span style="color:#e6db74">&#34;Failed to serialize program to protobuf: </span><span style="color:#e6db74">\(</span>error<span style="color:#e6db74">)</span><span style="color:#e6db74">&#34;</span>)
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">convenience</span> <span style="color:#66d9ef">init</span>(fromPath path: String) {
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">do</span> {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">let</span> data = <span style="color:#66d9ef">try</span> Data(contentsOf: URL(fileURLWithPath: path))
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">let</span> pb = <span style="color:#66d9ef">try</span> Fuzzilli_Protobuf_Program(serializedBytes: data)
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">try</span> <span style="color:#66d9ef">self</span>.<span style="color:#66d9ef">init</span>(from: pb)
+</span></span><span style="display:flex;"><span>    } <span style="color:#66d9ef">catch</span> {
+</span></span><span style="display:flex;"><span>        fatalError(<span style="color:#e6db74">&#34;Failed to create program from protobuf: </span><span style="color:#e6db74">\(</span>error<span style="color:#e6db74">)</span><span style="color:#e6db74">&#34;</span>)
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>}</span></span></code></pre></div></div>
+<p> </p>
+<ul>
+<li><code>size</code> &amp; <code>isEmpty</code>
+<ul>
+<li><code>size</code>: Returns <code>code.count</code> — the number of instructions in the program.</li>
+<li><code>isEmpty</code>: Returns <code>true</code> if <code>size == 0</code>.</li>
+</ul>
+</li>
+<li><code>clearParent()</code>
+<ul>
+<li>Sets the <code>parent</code> to <code>nil</code>, effectively detaching the program from its ancestry.</li>
+<li>Useful for avoiding memory leaks or breaking complex program trees.</li>
+</ul>
+</li>
+<li><code>copy()</code>
+<ul>
+<li>Performs a <strong>deep copy</strong> of the program.</li>
+<li>Internally, it uses <strong>Protobuf serialization followed by deserialization</strong> to construct a new <code>Program</code> instance with the same content.</li>
+<li>Copies most components including the code and comments.</li>
+</ul>
+</li>
+<li><code>containsWasm</code>
+<ul>
+<li>Iterates through all instructions and checks whether any operation is <strong>WASM-specific</strong> (<code>instr.op is WasmOperation</code>).</li>
+<li>Returns <code>true</code> if at least one such instruction is found.</li>
+</ul>
+</li>
+<li><code>storeToDisk(atPath path: String)</code>
+<ul>
+<li>Serializes the program using <strong>Protobuf</strong> and writes it to disk at the given path (typically with a <code>.fzil</code> extension).</li>
+<li>Useful for debugging or saving snapshots of the current program state.</li>
+</ul>
+</li>
+<li><code>init(fromPath path: String)</code>
+<ul>
+<li>A convenience initializer that reads a <code>.fzil</code> file from disk and deserializes it using Protobuf.</li>
+<li>Enables inspection of previously saved programs during debugging using FuzzILTool.</li>
+</ul>
+</li>
+</ul>
+<p> </p>
+
+<h2 id="protobufconvertible-extension">
+  ProtobufConvertible Extension
+  <a href="#protobufconvertible-extension" class="hanchor" ariaLabel="Anchor"></a>
+</h2>
+
+<div class="highlight-wrapper">
+  <div class="highlight-toolbar">
+    <span class="item">
+      <span class="label">Lang:</span>
+      <span class="name">swift</span>
+    </span>
+
+
+    <button class="item right outline brighter hide js-btn-copy-code">Copy</button>
+  </div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-swift" data-lang="swift"><span style="display:flex;"><span><span style="color:#66d9ef">extension</span> <span style="color:#a6e22e">Program</span>: ProtobufConvertible {
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">typealias</span> ProtobufType = Fuzzilli_Protobuf_Program
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">func</span> <span style="color:#a6e22e">asProtobuf</span>(opCache: OperationCache? = <span style="color:#66d9ef">nil</span>) -&gt; ProtobufType {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> ProtobufType.with {
+</span></span><span style="display:flex;"><span>            $0.uuid = id.uuidData
+</span></span><span style="display:flex;"><span>            $0.code = code.map({ $0.asProtobuf(with: opCache) })
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">if</span> <span style="color:#f92672">!</span>comments.isEmpty {
+</span></span><span style="display:flex;"><span>                $0.comments = comments.asProtobuf()
+</span></span><span style="display:flex;"><span>            }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">if</span> <span style="color:#66d9ef">let</span> parent = parent {
+</span></span><span style="display:flex;"><span>                $0.parent = parent.asProtobuf(opCache: opCache)
+</span></span><span style="display:flex;"><span>            }
+</span></span><span style="display:flex;"><span>        }
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">func</span> <span style="color:#a6e22e">asProtobuf</span>() -&gt; ProtobufType {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> asProtobuf(opCache: <span style="color:#66d9ef">nil</span>)
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">convenience</span> <span style="color:#66d9ef">init</span>(from proto: ProtobufType, opCache: OperationCache? = <span style="color:#66d9ef">nil</span>) <span style="color:#66d9ef">throws</span> {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">var</span> code = Code()
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">for</span> (i, protoInstr) <span style="color:#66d9ef">in</span> proto.code.enumerated() {
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">do</span> {
+</span></span><span style="display:flex;"><span>                code.append(<span style="color:#66d9ef">try</span> Instruction(from: protoInstr, with: opCache))
+</span></span><span style="display:flex;"><span>            } <span style="color:#66d9ef">catch</span> FuzzilliError.instructionDecodingError(<span style="color:#66d9ef">let</span> reason) {
+</span></span><span style="display:flex;"><span>                <span style="color:#66d9ef">throw</span> FuzzilliError.programDecodingError(<span style="color:#e6db74">&#34;could not decode instruction #</span><span style="color:#e6db74">\(</span>i<span style="color:#e6db74">)</span><span style="color:#e6db74">: </span><span style="color:#e6db74">\(</span>reason<span style="color:#e6db74">)</span><span style="color:#e6db74">&#34;</span>)
+</span></span><span style="display:flex;"><span>            }
+</span></span><span style="display:flex;"><span>        }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">do</span> {
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">try</span> code.check()
+</span></span><span style="display:flex;"><span>        } <span style="color:#66d9ef">catch</span> FuzzilliError.codeVerificationError(<span style="color:#66d9ef">let</span> reason) {
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">throw</span> FuzzilliError.programDecodingError(<span style="color:#e6db74">&#34;decoded code is not statically valid: </span><span style="color:#e6db74">\(</span>reason<span style="color:#e6db74">)</span><span style="color:#e6db74">&#34;</span>)
+</span></span><span style="display:flex;"><span>        }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">self</span>.<span style="color:#66d9ef">init</span>(code: code)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">if</span> <span style="color:#66d9ef">let</span> uuid = UUID(uuidData: proto.uuid) {
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">self</span>.id = uuid
+</span></span><span style="display:flex;"><span>        }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">self</span>.comments = ProgramComments(from: proto.comments)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">if</span> proto.hasParent {
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">self</span>.parent = <span style="color:#66d9ef">try</span> Program(from: proto.parent, opCache: opCache)
+</span></span><span style="display:flex;"><span>        }
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">convenience</span> <span style="color:#66d9ef">init</span>(from proto: ProtobufType) <span style="color:#66d9ef">throws</span> {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">try</span> <span style="color:#66d9ef">self</span>.<span style="color:#66d9ef">init</span>(from: proto, opCache: <span style="color:#66d9ef">nil</span>)
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>}</span></span></code></pre></div></div>
+<p> </p>
+<p>FuzzIL supports <strong>serialization and deserialization of programs in Protobuf format</strong>, allowing programs to be saved, reloaded, and used in workflows such as crash lifting.</p>
+<p> </p>
+<p>Let’s look at the flow:</p>
+<p> </p>
+
+<h3 id="serialization-flow-asprotobuf">
+  Serialization Flow (<code>asProtobuf</code>)
+  <a href="#serialization-flow-asprotobuf" class="hanchor" ariaLabel="Anchor"></a>
+</h3>
+<p> </p>
+<ol>
+<li><code>func asProtobuf(opCache: OperationCache? = nil) -&gt; Fuzzilli_Protobuf_Program</code>
+<ul>
+<li>Converts the entire program into a <code>Fuzzilli_Protobuf_Program</code> message, including:
+<ul>
+<li><code>id</code> (program UUID)</li>
+<li><code>code</code> (list of instructions)</li>
+<li><code>comments</code></li>
+<li><code>parent</code> (if any, recursively encoded)</li>
+</ul>
+</li>
+<li>Each instruction is converted via <code>code.map { $0.asProtobuf(...) }</code>.</li>
+</ul>
+</li>
+<li><code>public func asProtobuf() -&gt; ProtobufType</code>
+<ul>
+<li>A convenience wrapper that simply calls <code>asProtobuf(opCache: nil)</code>.</li>
+<li>Performs basic serialization without a custom <code>OperationCache</code>.</li>
+</ul>
+</li>
+</ol>
+<p> </p>
+
+<h3 id="deserialization-flow-initfrom">
+  Deserialization Flow (<code>init(from:)</code>)
+  <a href="#deserialization-flow-initfrom" class="hanchor" ariaLabel="Anchor"></a>
+</h3>
+<p> </p>
+<ol>
+<li><code>convenience init(from proto: ProtobufType, opCache: OperationCache? = nil) throws</code>
+<ul>
+<li>Reconstructs the <code>code</code> from the Protobuf message (<code>Fuzzilli_Protobuf_Program</code>).
+<ul>
+<li>Each instruction in <code>proto.code</code> is deserialized accordingly.</li>
+</ul>
+</li>
+<li>Validates the reconstructed code with <code>code.check()</code>.</li>
+<li>If valid, initializes via <code>self.init(code: code)</code>.</li>
+<li>Also restores metadata:
+<ul>
+<li><code>uuid</code> from <code>proto.uuid</code> via <code>UUID(uuidData:)</code></li>
+<li><code>comments</code> via <code>ProgramComments(from: proto.comments)</code></li>
+<li>If <code>proto.hasParent</code> is true, recursively restores the parent via <code>Program(from: proto.parent, ...)</code>.</li>
+</ul>
+</li>
+</ul>
+</li>
+<li><code>public convenience init(from proto: ProtobufType) throws</code>
+<ul>
+<li>A simplified version of the above that omits the <code>opCache</code> parameter.</li>
+<li>Provides a clean and easy way to decode serialized program data.</li>
+</ul>
+</li>
+</ol>
+<p> </p>
+
+<h1 id="variableswift">
+  Variable.swift
+  <a href="#variableswift" class="hanchor" ariaLabel="Anchor"></a>
+</h1>
+
+<div class="highlight-wrapper">
+  <div class="highlight-toolbar">
+    <span class="item">
+      <span class="label">Lang:</span>
+      <span class="name">swift</span>
+    </span>
+
+
+    <button class="item right outline brighter hide js-btn-copy-code">Copy</button>
+  </div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-swift" data-lang="swift"><span style="display:flex;"><span><span style="color:#75715e">// Copyright 2019 Google LLC</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">//</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// Licensed under the Apache License, Version 2.0 (the &#34;License&#34;);</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// you may not use this file except in compliance with the License.</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// You may obtain a copy of the License at</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">//</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// https://www.apache.org/licenses/LICENSE-2.0</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">//</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// Unless required by applicable law or agreed to in writing, software</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// distributed under the License is distributed on an &#34;AS IS&#34; BASIS,</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// See the License for the specific language governing permissions and</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// limitations under the License.</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">/// A variable in the FuzzIL language.</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">///</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">/// Variables names (numbers) are local to a program. Different programs</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">/// will have the same variable names referring to different things.</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">public</span> <span style="color:#66d9ef">struct</span> <span style="color:#a6e22e">Variable</span>: Hashable, CustomStringConvertible {
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// We assume that programs will always have less than 64k variables</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">private</span> <span style="color:#66d9ef">let</span> num: UInt16?
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">init</span>(number: Int) {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">self</span>.num = UInt16(number)
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">init</span>() {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">self</span>.num = <span style="color:#66d9ef">nil</span>
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">var</span> number: Int {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> Int(num!)
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">var</span> description: String {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> identifier
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">var</span> identifier: String {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> <span style="color:#e6db74">&#34;v</span><span style="color:#e6db74">\(</span>number<span style="color:#e6db74">)</span><span style="color:#e6db74">&#34;</span>
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">static</span> <span style="color:#66d9ef">func</span> ==(lhs: Variable, rhs: Variable) -&gt; Bool {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> lhs.number == rhs.number
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">static</span> <span style="color:#66d9ef">func</span> <span style="color:#a6e22e">isValidVariableNumber</span>(<span style="color:#66d9ef">_</span> number: Int) -&gt; Bool {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> UInt16(exactly: number) <span style="color:#f92672">!=</span> <span style="color:#66d9ef">nil</span>
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">extension</span> <span style="color:#a6e22e">Variable</span>: Comparable {
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">static</span> <span style="color:#66d9ef">func</span> <span style="color:#f92672">&lt;</span>(lhs: Variable, rhs: Variable) -&gt; Bool {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> lhs.number <span style="color:#f92672">&lt;</span> rhs.number
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>}</span></span></code></pre></div></div>
+<p> </p>
+<ul>
+<li>
+<p><code>private let num: UInt16?</code></p>
+<ul>
+<li>Stores the variable number as a 16-bit integer (or <code>nil</code>).</li>
+<li>According to the comment, it assumes variables are “less than 64k (65535)”.</li>
+<li>If <code>num</code> is <code>nil</code>, it may mean the variable is in a state of “<strong>not yet having a valid number</strong>” (used for special purposes).</li>
+</ul>
+</li>
+<li>
+<p><code>init(number: Int)</code> / <code>init()</code></p>
+<ul>
+<li><code>init(number:)</code> converts the input <code>Int</code> value to <code>UInt16</code> and stores it in <code>num</code>.
+<ul>
+<li>If the conversion fails (e.g., because it’s larger than 65535), a runtime error may occur in Swift.</li>
+</ul>
+</li>
+<li>The parameterless <code>init()</code> sets <code>num = nil</code>:
+Although not commonly used in practice, it can represent an “empty variable.”</li>
+</ul>
+</li>
+<li>
+<p><code>var number: Int</code></p>
+<ul>
+<li>Returns <code>num!</code> cast to <code>Int</code>.</li>
+<li>Because it uses <code>!</code>, the assumption in actual usage is that “this variable has a valid number.”</li>
+</ul>
+</li>
+<li>
+<p><code>identifier</code> and <code>description</code></p>
+<ul>
+<li><code>identifier = &quot;v\(number)&quot;</code></li>
+<li>For example: if the <code>number</code> is 3, then <code>&quot;v3&quot;</code></li>
+<li>The <code>description</code> property returns the same value → When <code>print(variable)</code> is called, it appears as <code>&quot;v3&quot;</code></li>
+</ul>
+</li>
+<li>
+<p><strong>Operators (Equatable, Comparable, Hashable)</strong></p>
+<ul>
+<li><code>==</code> : <code>lhs.number == rhs.number</code></li>
+<li><code>&lt;</code> : <code>lhs.number &lt; rhs.number</code></li>
+<li>The Hashable protocol uses <code>number</code> to generate the hash (usually implemented together with <code>Equatable</code>)</li>
+</ul>
+</li>
+<li>
+<p><code>isValidVariableNumber(_:)</code></p>
+<ul>
+<li>A static method that checks whether the given <code>Int</code> is in the range of <code>UInt16</code>.</li>
+<li>Used to check valid range when creating a variable, i.e., to determine if it is “less than or equal to 65535.”</li>
+</ul>
+</li>
+</ul>
+<p> </p>
+<p>Represents a “variable” used for input/output of <code>Instruction</code> in a FuzzIL program.</p>
+<p> </p>
+<p>For example:</p>
+
+<div class="highlight-wrapper">
+  <div class="highlight-toolbar">
+    <span class="item">
+      <span class="label">Lang:</span>
+      <span class="name">swift</span>
+    </span>
+
+
+    <button class="item right outline brighter hide js-btn-copy-code">Copy</button>
+  </div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-swift" data-lang="swift"><span style="display:flex;"><span><span style="color:#66d9ef">let</span> v0 = Variable(number: <span style="color:#ae81ff">0</span>)  <span style="color:#75715e">// &#34;v0&#34;</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">let</span> v1 = Variable(number: <span style="color:#ae81ff">1</span>)  <span style="color:#75715e">// &#34;v1&#34;</span></span></span></code></pre></div></div>
+<p> </p>
+<ul>
+<li><code>v0 == v1</code> is <code>false</code>, and comparisons like <code>v1 &lt; v0</code> are also possible.</li>
+<li>Even if the same number (e.g., <code>v0</code>) is used in multiple programs, they may belong to different contexts.</li>
+</ul>
+<blockquote>
+<p>Therefore, the key point is that variables are <strong>uniquely identified within a single program</strong>.</p></blockquote>
+<p> </p>
+
+<h2 id="summary-1">
+  Summary
+  <a href="#summary-1" class="hanchor" ariaLabel="Anchor"></a>
+</h2>
+<p> </p>
+<p><code>Variable</code> is the <strong>basic unit representing a single variable</strong> in FuzzIL. Internally, it uses a 16-bit integer to represent up to 65,535 variables. This struct:</p>
+<ul>
+<li>Provides a simple identifier in the form of “<strong>v(number)</strong>”</li>
+<li>Implements <code>Equatable</code>, <code>Comparable</code>, and <code>Hashable</code>, making it usable in sets, dictionaries, sorting, etc.</li>
+<li>Care must be taken not to exceed the integer range, but otherwise it allows lightweight and simple variable handling</li>
+</ul>
+<p> </p>
+<blockquote>
+<p>In short, this struct allows <strong>every variable in a FuzzIL program to be identified by a single numeric index</strong>, enabling code transformation, mutation, validation, and more to consistently manage variables in forms like “this variable is <code>v3</code>”.</p></blockquote>
+
+<h1 id="to-close-out-this-post">
+  To close out this post
+  <a href="#to-close-out-this-post" class="hanchor" ariaLabel="Anchor"></a>
+</h1>
+<p> </p>
+<p>This concludes my second post. Compared to the first one, this was relatively simple. Since I rely on translation tools and GPT to write in English, the phrasing may feel a bit awkward or stiff—I hope you’ll understand. I did my best to preserve the meaning I intended, and I hope it came across clearly despite the translation.</p>
+<p>Thank you for reading!</p>
 
       </div>
 
@@ -671,7 +1592,7 @@ extension Operation {
         </main>
         <footer class="site-footer">
 <p class="buildinfo">
-  <time datetime="2025-04-05 20:38:07 KST">Site built on: 2025-04-05 20:38:07 KST</time>
+  <time datetime="2025-04-06 01:32:18 KST">Site built on: 2025-04-06 01:32:18 KST</time>
 </p>
 <div class="copyright">
   <p></p>
