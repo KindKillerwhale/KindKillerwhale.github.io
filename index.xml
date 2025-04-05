@@ -2,17 +2,17 @@
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
     <title>kind_killerwhale</title>
-    <link>http://localhost:5689/</link>
+    <link>https://rpc.kr/</link>
     <description>Recent content on kind_killerwhale</description>
     <generator>Hugo -- gohugo.io</generator>
       <language>en-us</language>
-      <lastBuildDate>Sat, 05 Apr 2025 00:00:00 +0000</lastBuildDate><atom:link href="http://localhost:5689/index.xml" rel="self" type="application/rss+xml" />
+      <lastBuildDate>Sat, 05 Apr 2025 00:00:00 +0000</lastBuildDate><atom:link href="https://rpc.kr/index.xml" rel="self" type="application/rss+xml" />
     <item>
       <title>Fuzzilli IR Code Based Research Part 2 ( Opcodes.swift, Operation.swift, Program.swift, Variable.swift )</title>
-      <link>http://localhost:5689/posts/fuzzilli-ir-code-based-research-part-2/</link>
+      <link>https://rpc.kr/posts/fuzzilli-ir-code-based-research-part-2/</link>
       <pubDate>Sat, 05 Apr 2025 00:00:00 +0000</pubDate>
 
-      <guid>http://localhost:5689/posts/fuzzilli-ir-code-based-research-part-2/</guid>
+      <guid>https://rpc.kr/posts/fuzzilli-ir-code-based-research-part-2/</guid>
       <description>&lt;p&gt; &lt;/p&gt;
 &lt;p&gt;Welcome back to the second post in this series. In this article, we’ll dive into &lt;code&gt;Opcodes.swift&lt;/code&gt;, &lt;code&gt;Operation.swift&lt;/code&gt;, &lt;code&gt;Program.swift&lt;/code&gt;, and &lt;code&gt;Variable.swift&lt;/code&gt;.&lt;/p&gt;
 
@@ -915,10 +915,10 @@ extension Operation {
     </item>
     <item>
       <title>Fuzzilli IR Code Based Research Introduction</title>
-      <link>http://localhost:5689/posts/fuzzilli-ir-code-based-research/</link>
+      <link>https://rpc.kr/posts/fuzzilli-ir-code-based-research/</link>
       <pubDate>Fri, 04 Apr 2025 00:00:00 +0000</pubDate>
 
-      <guid>http://localhost:5689/posts/fuzzilli-ir-code-based-research/</guid>
+      <guid>https://rpc.kr/posts/fuzzilli-ir-code-based-research/</guid>
       <description>&lt;p&gt; 
 The &lt;code&gt;fuzzilli/Sources/Fuzzilli/FuzzIL&lt;/code&gt; directory contains the following files.
  &lt;/p&gt;
@@ -965,10 +965,10 @@ The &lt;code&gt;fuzzilli/Sources/Fuzzilli/FuzzIL&lt;/code&gt; directory contains
     </item>
     <item>
       <title>Fuzzilli IR Code Based Research Part 1 ( Analyzer.swift, Blocks.swift, Context.swift )</title>
-      <link>http://localhost:5689/posts/fuzzilli-ir-code-based-research-part-1/</link>
+      <link>https://rpc.kr/posts/fuzzilli-ir-code-based-research-part-1/</link>
       <pubDate>Fri, 04 Apr 2025 00:00:00 +0000</pubDate>
 
-      <guid>http://localhost:5689/posts/fuzzilli-ir-code-based-research-part-1/</guid>
+      <guid>https://rpc.kr/posts/fuzzilli-ir-code-based-research-part-1/</guid>
       <description>&lt;p&gt; &lt;/p&gt;
 &lt;p&gt;This is the first post in a series that deeply analyzes Fuzzilli’s IR codebase.
 In this post, as indicated by the title, we’ll take a closer look at &lt;code&gt;Analyzer.swift&lt;/code&gt;, &lt;code&gt;Blocks.swift&lt;/code&gt;, and &lt;code&gt;Context.swift&lt;/code&gt;.&lt;/p&gt;
