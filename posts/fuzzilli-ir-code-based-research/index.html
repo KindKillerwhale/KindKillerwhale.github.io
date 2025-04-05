@@ -1,13 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
+  <head><script src="/livereload.js?mindelay=10&amp;v=2&amp;port=5689&amp;path=livereload" data-no-instant defer></script>
 <title>Fuzzilli IR Code Based Research Introduction :: kind_killerwhale</title>
 <meta http-equiv="content-type" content="text/html; charset=utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="description" content="Perform an in-depth code-level analysis of how Fuzzilli&#39;s Intermediate Representation (IR) is implemented, focusing on the construction, transformation, and usage of IR within the fuzzing pipeline." />
 <meta name="keywords" content="" />
 <meta name="robots" content="noodp" />
-<link rel="canonical" href="https://rpc.kr/posts/fuzzilli-ir-code-based-research/" />
+<link rel="canonical" href="http://localhost:5689/posts/fuzzilli-ir-code-based-research/" />
 <meta property="og:locale" content="en" />
 <meta property="og:title" content="Fuzzilli IR Code Based Research Introduction :: kind_killerwhale" />
 <meta property="og:description" content="Perform an in-depth code-level analysis of how Fuzzilli&#39;s Intermediate Representation (IR) is implemented, focusing on the construction, transformation, and usage of IR within the fuzzing pipeline." />
@@ -15,7 +15,7 @@
     <meta property="article:published_time" content="2025-04-04 00:00:00 &#43;0000 UTC" />
     <meta property="article:modified_time" content="2025-04-04 00:00:00 UTC" />
   <meta property="article:author" content="DongHyeon Hwang ( @kind_killerwhale )" />
-<meta property="og:url" content="https://rpc.kr/posts/fuzzilli-ir-code-based-research/" />
+<meta property="og:url" content="http://localhost:5689/posts/fuzzilli-ir-code-based-research/" />
 <meta property="og:site_name" content="kind_killerwhale" />
 <meta property="og:image" content="" />
 <meta property="og:image:width" content="2048" />
@@ -28,7 +28,7 @@
   rel="stylesheet"
 />
 <link href="/posts/fuzzilli-ir-code-based-research/" rel="alternate" type="application/rss+xml" title="kind_killerwhale" />
-<link rel="stylesheet" href="https://rpc.kr/styles.4fd90a6505ea3851d8e267e6d7bae379bd7eec066a38333cb916e838598e51aa.css" integrity="sha256-T9kKZQXqOFHY4mfm17rjeb1&#43;7AZqODM8uRboOFmOUao=" />
+<link rel="stylesheet" href="http://localhost:5689/styles.css" />
 </head>
 
   <body>
@@ -38,7 +38,7 @@
 <nav class="navbar">
   <div class="navbar__first">
     <ul class="navbar__list borders">
-      <li><a href="https://rpc.kr/">Home</a></li>
+      <li><a href="http://localhost:5689/">Home</a></li>
       <li>
         <button class="theme-toggle transparent"><svg class="theme-toggler" width="24" height="24" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
   <path
@@ -69,7 +69,7 @@
 </header>
         <main class="site-main"><article class="post">
     <header class="post-header">
-        <h1 class="post-title"><a href="https://rpc.kr/posts/fuzzilli-ir-code-based-research/">Fuzzilli IR Code Based Research Introduction</a></h1>
+        <h1 class="post-title"><a href="http://localhost:5689/posts/fuzzilli-ir-code-based-research/">Fuzzilli IR Code Based Research Introduction</a></h1>
         <div class="post-meta">
             <time pubdate datetime="2025-04-04 00:00:00 UTC">
               Published on
@@ -78,7 +78,7 @@
             <span>by DongHyeon Hwang ( @kind_killerwhale )</span>
             <time pubdate datetime="2025-04-04 00:00:00 UTC"> last modified 2025-04-04 00:00:00 UTC. </time>
         </div>
-        <p class="post-tags">Tags:&nbsp;#<a href="https://rpc.kr/tags/fuzzilli/">Fuzzilli</a>&nbsp;#<a href="https://rpc.kr/tags/ir/">IR</a>&nbsp;#<a href="https://rpc.kr/tags/fuzzer/">Fuzzer</a>&nbsp;</p>
+        <p class="post-tags">Tags:&nbsp;#<a href="http://localhost:5689/tags/fuzzilli/">Fuzzilli</a>&nbsp;#<a href="http://localhost:5689/tags/ir/">IR</a>&nbsp;#<a href="http://localhost:5689/tags/fuzzer/">Fuzzer</a>&nbsp;</p>
         <p class="post-description">Perform an in-depth code-level analysis of how Fuzzilli&#39;s Intermediate Representation (IR) is implemented, focusing on the construction, transformation, and usage of IR within the fuzzing pipeline.</p>
     </header>
       <div class="post-content">
@@ -113,9 +113,13 @@ The <code>fuzzilli/Sources/Fuzzilli/FuzzIL</code> directory contains the followi
       <hr />
     </div>
     <div class="buttons fill">
-        <a href="https://rpc.kr/posts/fuzzilli-ir-code-based-research-part-1/" class="button">
+        <a href="http://localhost:5689/posts/fuzzilli-ir-code-based-research-part-1/" class="button">
           <span class="icon">&lArr;</span>
           <span class="label">Fuzzilli IR Code Based Research Part 1 ( Analyzer.swift, Blocks.swift, Context.swift )</span>
+        </a>
+        <a href="http://localhost:5689/posts/fuzzilli-ir-code-based-research-part-2/" class="button right">
+          <span class="label">Fuzzilli IR Code Based Research Part 2 ( Opcodes.swift, Operation.swift, Program.swift, Variable.swift )</span>
+          <span class="icon right">&rArr;</span>
         </a>
     </div>
   </div>
@@ -125,20 +129,20 @@ The <code>fuzzilli/Sources/Fuzzilli/FuzzIL</code> directory contains the followi
         </main>
         <footer class="site-footer">
 <p class="buildinfo">
-  <time datetime="2025-04-05 00:22:20 KST">Site built on: 2025-04-05 00:22:20 KST</time>
+  <time datetime="2025-04-05 20:26:20 KST">Site built on: 2025-04-05 20:26:20 KST</time>
 </p>
 <div class="copyright">
   <p></p>
   <nav class="navbar">
     <ul class="navbar__list">
-      <li><a href="https://rpc.kr/posts/index.xml">RSS</a></li>
-      <li><a href="https://rpc.kr/sitemap.xml">Sitemap</a></li>
+      <li><a href="http://localhost:5689/posts/index.xml">RSS</a></li>
+      <li><a href="http://localhost:5689/sitemap.xml">Sitemap</a></li>
     </ul>
   </nav>
 </div>
 <p class="themeinfo">Powered by <a href="https://gohugo.io">Hugo</a>, using theme <a href="https://manid2.github.io/hugo-xterm/">Hugo Xterm</a>.</p>
 </footer>
       </div>
-    </div><script type="text/javascript" src="/bundle.min.js"></script>
+    </div><script type="text/javascript" src="/bundle.js"></script>
 </body>
 </html>

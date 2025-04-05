@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head><script src="/livereload.js?mindelay=10&amp;v=2&amp;port=5689&amp;path=livereload" data-no-instant defer></script>
+<title>Fuzzilli IR Code Based Research Part 2 ( Opcodes.swift, Operation.swift, Program.swift, Variable.swift ) :: kind_killerwhale</title>
+<meta http-equiv="content-type" content="text/html; charset=utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="description" content="A deep dive into the core IR components of Fuzzilli, focusing on Opcodes.swift, Operation.swift, Program.swift, Variable.swift. This post is the second in the series exploring the IR internal structure of Fuzzilli.
+" />
+<meta name="keywords" content="" />
+<meta name="robots" content="noodp" />
+<link rel="canonical" href="http://localhost:5689/posts/fuzzilli-ir-code-based-research-part-2/" />
+<meta property="og:locale" content="en" />
+<meta property="og:title" content="Fuzzilli IR Code Based Research Part 2 ( Opcodes.swift, Operation.swift, Program.swift, Variable.swift ) :: kind_killerwhale" />
+<meta property="og:description" content="A deep dive into the core IR components of Fuzzilli, focusing on Opcodes.swift, Operation.swift, Program.swift, Variable.swift. This post is the second in the series exploring the IR internal structure of Fuzzilli.
+" />
+  <meta property="og:type" content="article" />
+    <meta property="article:published_time" content="2025-04-05 00:00:00 &#43;0000 UTC" />
+    <meta property="article:modified_time" content="2025-04-05 00:00:00 UTC" />
+  <meta property="article:author" content="DongHyeon Hwang ( @kind_killerwhale )" />
+<meta property="og:url" content="http://localhost:5689/posts/fuzzilli-ir-code-based-research-part-2/" />
+<meta property="og:site_name" content="kind_killerwhale" />
+<meta property="og:image" content="" />
+<meta property="og:image:width" content="2048" />
+<meta property="og:image:height" content="1024" />
+<link rel="shortcut icon" href="" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link
+  href="https://fonts.googleapis.com/css2?family=Fira+Sans:ital,wght@0,300;0,400;0,500;1,300;1,400;1,500&family=Roboto+Slab:wght@300;400;500&family=Ubuntu+Mono:ital@0;1&display=swap"
+  rel="stylesheet"
+/>
+<link href="/posts/fuzzilli-ir-code-based-research-part-2/" rel="alternate" type="application/rss+xml" title="kind_killerwhale" />
+<link rel="stylesheet" href="http://localhost:5689/styles.css" />
+</head>
+
+  <body>
+    <div class="theme-container">
+      <div class="container center">
+        <header class="site-header">
+<nav class="navbar">
+  <div class="navbar__first">
+    <ul class="navbar__list borders">
+      <li><a href="http://localhost:5689/">Home</a></li>
+      <li>
+        <button class="theme-toggle transparent"><svg class="theme-toggler" width="24" height="24" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <path
+    d="M22 41C32.4934 41 41 32.4934 41 22C41 11.5066 32.4934 3 22
+  3C11.5066 3 3 11.5066 3 22C3 32.4934 11.5066 41 22 41ZM7 22C7
+  13.7157 13.7157 7 22 7V37C13.7157 37 7 30.2843 7 22Z"
+  />
+</svg>
+</button>
+      </li>
+    </ul>
+  </div>
+  <div class="navbar__separator"></div>
+    <div class="navbar__last">
+      <ul class="navbar__list borders menu--desktop">
+            <li><a href="/about/">About</a></li>
+            <li><a href="/posts/">Posts</a></li></ul>
+      <ul class="menu menu--mobile">
+        <li class="menu-trigger">===</li>
+        <li>
+          <ul class="menu-dropdown">
+                <li><a href="/about/">About</a></li>
+                <li><a href="/posts/">Posts</a></li></ul>
+        </li>
+      </ul>
+    </div>
+</nav>
+</header>
+        <main class="site-main"><article class="post">
+    <header class="post-header">
+        <h1 class="post-title"><a href="http://localhost:5689/posts/fuzzilli-ir-code-based-research-part-2/">Fuzzilli IR Code Based Research Part 2 ( Opcodes.swift, Operation.swift, Program.swift, Variable.swift )</a></h1>
+        <div class="post-meta">
+            <time pubdate datetime="2025-04-05 00:00:00 UTC">
+              Published on
+              2025-04-05 00:00:00 UTC
+            </time>
+            <span>by DongHyeon Hwang ( @kind_killerwhale )</span>
+            <time pubdate datetime="2025-04-05 00:00:00 UTC"> last modified 2025-04-05 00:00:00 UTC. </time>
+        </div>
+        <p class="post-tags">Tags:&nbsp;#<a href="http://localhost:5689/tags/fuzzilli/">Fuzzilli</a>&nbsp;#<a href="http://localhost:5689/tags/ir/">IR</a>&nbsp;#<a href="http://localhost:5689/tags/fuzzer/">Fuzzer</a>&nbsp;</p>
+        <p class="post-description">A deep dive into the core IR components of Fuzzilli, focusing on Opcodes.swift, Operation.swift, Program.swift, Variable.swift. This post is the second in the series exploring the IR internal structure of Fuzzilli.
+</p>
+    </header>
+      <div class="post-content">
+        <p> </p>
+<p>Welcome back to the second post in this series. In this article, we’ll dive into <code>Opcodes.swift</code>, <code>Operation.swift</code>, <code>Program.swift</code>, and <code>Variable.swift</code>.</p>
+
+<h1 id="opcodesswift">
+  Opcodes.swift
+  <a href="#opcodesswift" class="hanchor" ariaLabel="Anchor"></a>
+</h1>
+<hr>
+
+<div class="highlight-wrapper">
+  <div class="highlight-toolbar">
+    <span class="item">
+      <span class="label">Lang:</span>
+      <span class="name">swift</span>
+    </span>
+
+
+    <button class="item right outline brighter hide js-btn-copy-code">Copy</button>
+  </div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-swift" data-lang="swift"><span style="display:flex;"><span><span style="color:#75715e">// Copyright 2023 Google LLC</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">//</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// Licensed under the Apache License, Version 2.0 (the &#34;License&#34;);</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// you may not use this file except in compliance with the License.</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// You may obtain a copy of the License at</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">//</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// https://www.apache.org/licenses/LICENSE-2.0</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">//</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// Unless required by applicable law or agreed to in writing, software</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// distributed under the License is distributed on an &#34;AS IS&#34; BASIS,</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// See the License for the specific language governing permissions and</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// limitations under the License.</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">/// Enum defining all opcodes supported in FuzzIL.</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">///</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">/// There should be a 1:1 mapping between opcodes and Operation subclasses.</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">/// This enum is then mainly used for efficient type testing of Operations, for example in switch constructs:</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">///</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">///     switch instr.op.opcode() {</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">///         case .loadInt(let op):</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">///             doSomethingWithLoadInteger(op)</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">///         // ...</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">///         case .callFunction(let op):</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">///             doSomethingWithCallFunction(op)</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">///         // ...</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">///     }</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">///</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">/// This is both efficient, as only an integer value needs to be switched on, and type-safe, as it avoids type casts entirely.</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">enum</span> <span style="color:#a6e22e">Opcode</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> nop(Nop)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> loadInteger(LoadInteger)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> loadBigInt(LoadBigInt)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> loadFloat(LoadFloat)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> loadString(LoadString)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> loadBoolean(LoadBoolean)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> loadUndefined(LoadUndefined)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> loadNull(LoadNull)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> loadThis(LoadThis)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> loadArguments(LoadArguments)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> createNamedVariable(CreateNamedVariable)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> loadDisposableVariable(LoadDisposableVariable)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> loadAsyncDisposableVariable(LoadAsyncDisposableVariable)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> loadRegExp(LoadRegExp)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> beginObjectLiteral(BeginObjectLiteral)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> objectLiteralAddProperty(ObjectLiteralAddProperty)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> objectLiteralAddElement(ObjectLiteralAddElement)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> objectLiteralAddComputedProperty(ObjectLiteralAddComputedProperty)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> objectLiteralCopyProperties(ObjectLiteralCopyProperties)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> objectLiteralSetPrototype(ObjectLiteralSetPrototype)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> beginObjectLiteralMethod(BeginObjectLiteralMethod)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> endObjectLiteralMethod(EndObjectLiteralMethod)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> beginObjectLiteralComputedMethod(BeginObjectLiteralComputedMethod)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> endObjectLiteralComputedMethod(EndObjectLiteralComputedMethod)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> beginObjectLiteralGetter(BeginObjectLiteralGetter)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> endObjectLiteralGetter(EndObjectLiteralGetter)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> beginObjectLiteralSetter(BeginObjectLiteralSetter)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> endObjectLiteralSetter(EndObjectLiteralSetter)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> endObjectLiteral(EndObjectLiteral)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> beginClassDefinition(BeginClassDefinition)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> beginClassConstructor(BeginClassConstructor)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> endClassConstructor(EndClassConstructor)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> classAddInstanceProperty(ClassAddInstanceProperty)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> classAddInstanceElement(ClassAddInstanceElement)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> classAddInstanceComputedProperty(ClassAddInstanceComputedProperty)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> beginClassInstanceMethod(BeginClassInstanceMethod)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> endClassInstanceMethod(EndClassInstanceMethod)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> beginClassInstanceGetter(BeginClassInstanceGetter)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> endClassInstanceGetter(EndClassInstanceGetter)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> beginClassInstanceSetter(BeginClassInstanceSetter)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> endClassInstanceSetter(EndClassInstanceSetter)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> classAddStaticProperty(ClassAddStaticProperty)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> classAddStaticElement(ClassAddStaticElement)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> classAddStaticComputedProperty(ClassAddStaticComputedProperty)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> beginClassStaticInitializer(BeginClassStaticInitializer)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> endClassStaticInitializer(EndClassStaticInitializer)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> beginClassStaticMethod(BeginClassStaticMethod)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> endClassStaticMethod(EndClassStaticMethod)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> beginClassStaticGetter(BeginClassStaticGetter)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> endClassStaticGetter(EndClassStaticGetter)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> beginClassStaticSetter(BeginClassStaticSetter)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> endClassStaticSetter(EndClassStaticSetter)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> classAddPrivateInstanceProperty(ClassAddPrivateInstanceProperty)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> beginClassPrivateInstanceMethod(BeginClassPrivateInstanceMethod)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> endClassPrivateInstanceMethod(EndClassPrivateInstanceMethod)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> classAddPrivateStaticProperty(ClassAddPrivateStaticProperty)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> beginClassPrivateStaticMethod(BeginClassPrivateStaticMethod)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> endClassPrivateStaticMethod(EndClassPrivateStaticMethod)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> endClassDefinition(EndClassDefinition)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> createArray(CreateArray)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> createIntArray(CreateIntArray)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> createFloatArray(CreateFloatArray)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> createArrayWithSpread(CreateArrayWithSpread)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> createTemplateString(CreateTemplateString)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> getProperty(GetProperty)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> setProperty(SetProperty)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> updateProperty(UpdateProperty)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> deleteProperty(DeleteProperty)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> configureProperty(ConfigureProperty)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> getElement(GetElement)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> setElement(SetElement)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> updateElement(UpdateElement)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> deleteElement(DeleteElement)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> configureElement(ConfigureElement)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> getComputedProperty(GetComputedProperty)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> setComputedProperty(SetComputedProperty)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> updateComputedProperty(UpdateComputedProperty)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> deleteComputedProperty(DeleteComputedProperty)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> configureComputedProperty(ConfigureComputedProperty)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> typeOf(TypeOf)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> void(Void_)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> testInstanceOf(TestInstanceOf)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> testIn(TestIn)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> beginPlainFunction(BeginPlainFunction)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> endPlainFunction(EndPlainFunction)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> beginArrowFunction(BeginArrowFunction)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> endArrowFunction(EndArrowFunction)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> beginGeneratorFunction(BeginGeneratorFunction)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> endGeneratorFunction(EndGeneratorFunction)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> beginAsyncFunction(BeginAsyncFunction)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> endAsyncFunction(EndAsyncFunction)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> beginAsyncArrowFunction(BeginAsyncArrowFunction)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> endAsyncArrowFunction(EndAsyncArrowFunction)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> beginAsyncGeneratorFunction(BeginAsyncGeneratorFunction)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> endAsyncGeneratorFunction(EndAsyncGeneratorFunction)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> beginConstructor(BeginConstructor)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> endConstructor(EndConstructor)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> directive(Directive)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> `<span style="color:#66d9ef">return</span>`(Return)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> yield(Yield)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> yieldEach(YieldEach)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> await(Await)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> callFunction(CallFunction)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> callFunctionWithSpread(CallFunctionWithSpread)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> construct(Construct)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> constructWithSpread(ConstructWithSpread)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> callMethod(CallMethod)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> callMethodWithSpread(CallMethodWithSpread)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> callComputedMethod(CallComputedMethod)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> callComputedMethodWithSpread(CallComputedMethodWithSpread)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> unaryOperation(UnaryOperation)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> binaryOperation(BinaryOperation)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> ternaryOperation(TernaryOperation)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> update(Update)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> dup(Dup)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> reassign(Reassign)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> destructArray(DestructArray)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> destructArrayAndReassign(DestructArrayAndReassign)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> destructObject(DestructObject)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> destructObjectAndReassign(DestructObjectAndReassign)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> compare(Compare)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> eval(Eval)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> beginWith(BeginWith)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> endWith(EndWith)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> callSuperConstructor(CallSuperConstructor)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> callSuperMethod(CallSuperMethod)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> getPrivateProperty(GetPrivateProperty)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> setPrivateProperty(SetPrivateProperty)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> updatePrivateProperty(UpdatePrivateProperty)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> callPrivateMethod(CallPrivateMethod)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> getSuperProperty(GetSuperProperty)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> setSuperProperty(SetSuperProperty)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> getComputedSuperProperty(GetComputedSuperProperty)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> setComputedSuperProperty(SetComputedSuperProperty)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> updateSuperProperty(UpdateSuperProperty)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> beginIf(BeginIf)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> beginElse(BeginElse)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> endIf(EndIf)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> beginWhileLoopHeader(BeginWhileLoopHeader)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> beginWhileLoopBody(BeginWhileLoopBody)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> endWhileLoop(EndWhileLoop)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> beginDoWhileLoopBody(BeginDoWhileLoopBody)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> beginDoWhileLoopHeader(BeginDoWhileLoopHeader)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> endDoWhileLoop(EndDoWhileLoop)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> beginForLoopInitializer(BeginForLoopInitializer)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> beginForLoopCondition(BeginForLoopCondition)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> beginForLoopAfterthought(BeginForLoopAfterthought)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> beginForLoopBody(BeginForLoopBody)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> endForLoop(EndForLoop)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> beginForInLoop(BeginForInLoop)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> endForInLoop(EndForInLoop)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> beginForOfLoop(BeginForOfLoop)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> beginForOfLoopWithDestruct(BeginForOfLoopWithDestruct)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> endForOfLoop(EndForOfLoop)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> beginRepeatLoop(BeginRepeatLoop)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> endRepeatLoop(EndRepeatLoop)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> loopBreak(LoopBreak)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> loopContinue(LoopContinue)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> beginTry(BeginTry)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> beginCatch(BeginCatch)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> beginFinally(BeginFinally)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> endTryCatchFinally(EndTryCatchFinally)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> throwException(ThrowException)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> beginCodeString(BeginCodeString)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> endCodeString(EndCodeString)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> beginBlockStatement(BeginBlockStatement)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> endBlockStatement(EndBlockStatement)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> beginSwitch(BeginSwitch)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> beginSwitchCase(BeginSwitchCase)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> beginSwitchDefaultCase(BeginSwitchDefaultCase)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> endSwitchCase(EndSwitchCase)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> endSwitch(EndSwitch)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> switchBreak(SwitchBreak)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> loadNewTarget(LoadNewTarget)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> print(Print)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> explore(Explore)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> probe(Probe)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> fixup(Fixup)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> beginWasmModule(BeginWasmModule)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> endWasmModule(EndWasmModule)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> createWasmGlobal(CreateWasmGlobal)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> createWasmMemory(CreateWasmMemory)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> createWasmTable(CreateWasmTable)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> createWasmJSTag(CreateWasmJSTag)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> createWasmTag(CreateWasmTag)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wrapPromising(WrapPromising)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wrapSuspending(WrapSuspending)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> bindMethod(BindMethod)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// Wasm opcodes</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> consti64(Consti64)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> consti32(Consti32)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> constf32(Constf32)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> constf64(Constf64)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmReturn(WasmReturn)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmJsCall(WasmJsCall)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// Numerical Operations</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmi32CompareOp(Wasmi32CompareOp)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmi64CompareOp(Wasmi64CompareOp)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmf32CompareOp(Wasmf32CompareOp)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmf64CompareOp(Wasmf64CompareOp)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmi32EqualZero(Wasmi32EqualZero)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmi64EqualZero(Wasmi64EqualZero)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmi32BinOp(Wasmi32BinOp)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmi64BinOp(Wasmi64BinOp)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmi32UnOp(Wasmi32UnOp)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmi64UnOp(Wasmi64UnOp)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmf32BinOp(Wasmf32BinOp)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmf64BinOp(Wasmf64BinOp)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmf32UnOp(Wasmf32UnOp)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmf64UnOp(Wasmf64UnOp)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// Numerical Conversion / Truncation operations</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmWrapi64Toi32(WasmWrapi64Toi32)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmTruncatef32Toi32(WasmTruncatef32Toi32)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmTruncatef64Toi32(WasmTruncatef64Toi32)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmExtendi32Toi64(WasmExtendi32Toi64)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmTruncatef32Toi64(WasmTruncatef32Toi64)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmTruncatef64Toi64(WasmTruncatef64Toi64)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmConverti32Tof32(WasmConverti32Tof32)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmConverti64Tof32(WasmConverti64Tof32)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmDemotef64Tof32(WasmDemotef64Tof32)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmConverti32Tof64(WasmConverti32Tof64)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmConverti64Tof64(WasmConverti64Tof64)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmPromotef32Tof64(WasmPromotef32Tof64)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmReinterpretf32Asi32(WasmReinterpretf32Asi32)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmReinterpretf64Asi64(WasmReinterpretf64Asi64)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmReinterpreti32Asf32(WasmReinterpreti32Asf32)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmReinterpreti64Asf64(WasmReinterpreti64Asf64)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmSignExtend8Intoi32(WasmSignExtend8Intoi32)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmSignExtend16Intoi32(WasmSignExtend16Intoi32)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmSignExtend8Intoi64(WasmSignExtend8Intoi64)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmSignExtend16Intoi64(WasmSignExtend16Intoi64)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmSignExtend32Intoi64(WasmSignExtend32Intoi64)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmTruncateSatf32Toi32(WasmTruncateSatf32Toi32)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmTruncateSatf64Toi32(WasmTruncateSatf64Toi32)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmTruncateSatf32Toi64(WasmTruncateSatf32Toi64)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmTruncateSatf64Toi64(WasmTruncateSatf64Toi64)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmReassign(WasmReassign)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmDefineGlobal(WasmDefineGlobal)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmDefineTable(WasmDefineTable)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmDefineMemory(WasmDefineMemory)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmLoadGlobal(WasmLoadGlobal)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmStoreGlobal(WasmStoreGlobal)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmTableGet(WasmTableGet)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmTableSet(WasmTableSet)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmMemoryLoad(WasmMemoryLoad)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmMemoryStore(WasmMemoryStore)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> beginWasmFunction(BeginWasmFunction)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> endWasmFunction(EndWasmFunction)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmBeginBlock(WasmBeginBlock)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmEndBlock(WasmEndBlock)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmBeginLoop(WasmBeginLoop)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmEndLoop(WasmEndLoop)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmBranch(WasmBranch)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmBranchIf(WasmBranchIf)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmNop(WasmNop)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmBeginIf(WasmBeginIf)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmBeginElse(WasmBeginElse)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmEndIf(WasmEndIf)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmBeginTry(WasmBeginTry)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmBeginCatchAll(WasmBeginCatchAll)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmBeginCatch(WasmBeginCatch)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmEndTry(WasmEndTry)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmBeginTryDelegate(WasmBeginTryDelegate)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmEndTryDelegate(WasmEndTryDelegate)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmThrow(WasmThrow)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmRethrow(WasmRethrow)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmDefineTag(WasmDefineTag)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> constSimd128(ConstSimd128)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmSimd128Compare(WasmSimd128Compare)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmSimd128IntegerUnOp(WasmSimd128IntegerUnOp)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmSimd128IntegerBinOp(WasmSimd128IntegerBinOp)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmSimd128FloatUnOp(WasmSimd128FloatUnOp)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmSimd128FloatBinOp(WasmSimd128FloatBinOp)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmI64x2Splat(WasmI64x2Splat)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmI64x2ExtractLane(WasmI64x2ExtractLane)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmSimdLoad(WasmSimdLoad)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmUnreachable(WasmUnreachable)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> wasmSelect(WasmSelect)
+</span></span><span style="display:flex;"><span>}</span></span></code></pre></div></div>
+<p> </p>
+
+<h2 id="opcode-enum">
+  Opcode Enum
+  <a href="#opcode-enum" class="hanchor" ariaLabel="Anchor"></a>
+</h2>
+<p> </p>
+<p>FuzzIL handles various <strong>operations</strong> under a common interface. For example:</p>
+<p> </p>
+<ul>
+<li><code>LoadInt</code> operation: loads an integer value into a variable</li>
+<li><code>CallFunction</code> operation: calls a function</li>
+<li><code>BeginWhileLoop</code> / <code>EndWhileLoop</code> operations: start/end of a while loop</li>
+<li>… (including other JavaScript/WASM-related operations)</li>
+</ul>
+<p> </p>
+<blockquote>
+<p>The Opcode enum represents <strong>all possible operations</strong> in FuzzIL in a way that allows them to be <strong>switched on using integers</strong>.</p></blockquote>
+<p> </p>
+<p>Each case in the enum is associated with a specific <code>Operation</code> subclass.</p>
+<ul>
+<li>For example: <code>.loadInteger(LoadInteger)</code>
+<ul>
+<li>This allows for easy categorization like <code>.loadInteger(...)</code>, <code>.callFunction(...)</code>, etc.</li>
+</ul>
+</li>
+</ul>
+<p>There is also a <strong>1:1 mapping between opcodes and their corresponding</strong> <code>Operation</code> <strong>subclasses</strong>.</p>
+
+<div class="highlight-wrapper">
+  <div class="highlight-toolbar">
+    <span class="item">
+      <span class="label">Lang:</span>
+      <span class="name">swift</span>
+    </span>
+
+
+    <button class="item right outline brighter hide js-btn-copy-code">Copy</button>
+  </div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-swift" data-lang="swift"><span style="display:flex;"><span><span style="color:#66d9ef">switch</span> instruction.op.opcode {
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> .loadInteger(<span style="color:#66d9ef">let</span> op):
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e">// `op` is of type LoadInteger</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">case</span> .callFunction(<span style="color:#66d9ef">let</span> op):
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e">// &#39;op&#39;is of type CallFunction</span>
+</span></span><span style="display:flex;"><span>    ...
+</span></span><span style="display:flex;"><span>}</span></span></code></pre></div></div>
+<p> </p>
+
+<h1 id="operationswift">
+  Operation.swift
+  <a href="#operationswift" class="hanchor" ariaLabel="Anchor"></a>
+</h1>
+<hr>
+<p> </p>
+
+<div class="highlight-wrapper">
+  <div class="highlight-toolbar">
+    <span class="item">
+      <span class="label">Lang:</span>
+      <span class="name">swfit</span>
+    </span>
+
+
+    <button class="item right outline brighter hide js-btn-copy-code">Copy</button>
+  </div><pre tabindex="0"><code class="language-swfit" data-lang="swfit">// Copyright 2022 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the &#34;License&#34;);
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an &#34;AS IS&#34; BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+/// An operation in the FuzzIL language.
+///
+/// Operations can be shared between different programs since they do not contain any
+/// program specific data.
+public class Operation {
+    /// The context in which the operation can exist
+    final let requiredContext: Context
+
+    /// The context that this operations opens
+    final let contextOpened: Context
+
+    /// The attributes of this operation.
+    final let attributes: Attributes
+
+    /// The number of input variables to this operation.
+    private let numInputs_: UInt16
+    final var numInputs: Int {
+        return Int(numInputs_)
+    }
+
+    /// The number of newly created variables in the current scope.
+    private let numOutputs_: UInt16
+    final var numOutputs: Int {
+        return Int(numOutputs_)
+    }
+
+    /// The number of newly created variables in the inner scope if one is created.
+    private let numInnerOutputs_: UInt16
+    final var numInnerOutputs: Int {
+        return Int(numInnerOutputs_)
+    }
+
+    /// The index of the first variadic input.
+    private let firstVariadicInput_: UInt16
+    final var firstVariadicInput: Int {
+        assert(attributes.contains(.isVariadic))
+        return Int(firstVariadicInput_)
+    }
+
+    /// The opcode for this operation.
+    ///
+    /// Use this to determine the type of the operation as it is significantly more efficient than type checks using the &#34;is&#34; or &#34;as&#34; operators.
+    var opcode: Opcode {
+        fatalError(&#34;Operations must override the opcode getter. \(self.name) does not&#34;)
+    }
+
+    init(numInputs: Int = 0, numOutputs: Int = 0, numInnerOutputs: Int = 0, firstVariadicInput: Int = -1, attributes: Attributes = [], requiredContext: Context = .empty, contextOpened: Context = .empty) {
+        assert(attributes.contains(.isVariadic) == (firstVariadicInput != -1))
+        assert(firstVariadicInput == -1 || firstVariadicInput &lt;= numInputs)
+        assert(contextOpened == .empty || attributes.contains(.isBlockStart))
+        self.attributes = attributes
+        self.requiredContext = requiredContext
+        self.contextOpened = contextOpened
+        self.numInputs_ = UInt16(numInputs)
+        self.numOutputs_ = UInt16(numOutputs)
+        self.numInnerOutputs_ = UInt16(numInnerOutputs)
+        self.firstVariadicInput_ = attributes.contains(.isVariadic) ? UInt16(firstVariadicInput) : 0
+    }
+
+    /// Possible attributes of an operation.
+    struct Attributes: OptionSet {
+        let rawValue: UInt16
+
+        // This operation can be mutated in a meaningful way.
+        // The rough rule of thumbs is that every Operation subclass that has
+        // additional members should be mutable. Example include integer values
+        // (LoadInteger), string values (GetProperty and CallMethod), or Arrays
+        // (CallFunctionWithSpread).
+        // However, if mutations are not interesting or meaningful, or if the
+        // value space is very small (e.g. a boolean), it may make sense to not
+        // make the operation mutable to not degrade mutation performance (by
+        // causing many meaningless mutations). An example of such an exception
+        // is the isStrict member of function definitions: the value space is two
+        // (true or false) and mutating the isStrict member is probably not very
+        // interesting compared to mutations on other operations.
+        static let isMutable                    = Attributes(rawValue: 1 &lt;&lt; 0)
+
+        // The operation performs a subroutine call.
+        static let isCall                       = Attributes(rawValue: 1 &lt;&lt; 1)
+
+        // The operation is the start of a block.
+        static let isBlockStart                 = Attributes(rawValue: 1 &lt;&lt; 2)
+
+        // The operation is the end of a block.
+        static let isBlockEnd                   = Attributes(rawValue: 1 &lt;&lt; 3)
+
+        // The operation is used for internal purposes and should not
+        // be visible to the user (e.g. appear in emitted samples).
+        static let isInternal                   = Attributes(rawValue: 1 &lt;&lt; 4)
+
+        // The operation behaves like an (unconditional) jump. Any
+        // code until the next block end is therefore dead code.
+        static let isJump                       = Attributes(rawValue: 1 &lt;&lt; 5)
+
+        // The operation can take a variable number of inputs.
+        // The firstVariadicInput contains the index of the first variadic input.
+        static let isVariadic                   = Attributes(rawValue: 1 &lt;&lt; 6)
+
+        // This operation should occur at most once in its surrounding context.
+        // If there are multiple singular operations in the same context, then
+        // all but the first one are ignored (i.e. they are dead code).
+        // Examples for singular operations include the default switch case or
+        // a class constructor.
+        // We could also fobrid having multiple singular operations in the same
+        // block instead of ignoring all but the first one. However, that would
+        // complicate code generation and splicing which cannot generally
+        // uphold this property.
+        static let isSingular                   = Attributes(rawValue: 1 &lt;&lt; 7)
+
+        // The operation propagates the surrounding context.
+        // Most control-flow operations keep their surrounding context active.
+        static let propagatesSurroundingContext = Attributes(rawValue: 1 &lt;&lt; 8)
+
+        // The instruction resumes the context from before its parent context.
+        // This is useful for example for BeginSwitch and BeginSwitchCase.
+        static let resumesSurroundingContext    = Attributes(rawValue: 1 &lt;&lt; 9)
+
+        // The instruction is a Nop operation.
+        static let isNop                        = Attributes(rawValue: 1 &lt;&lt; 10)
+
+        // The instruction cannot be mutated with the input mutator
+        // This is not the case for most instructions except wasm instructions where we need to
+        // preserve types for correctness. Note: this is different than the .isMutable attribute.
+        static let isNotInputMutable               = Attributes(rawValue: 1 &lt;&lt; 11)
+    }
+}
+
+final class Nop: Operation {
+    override var opcode: Opcode { .nop(self) }
+
+    // NOPs can have &#34;pseudo&#34; outputs. These should not be used by other instructions
+    // and they should not be present in the lifted code, i.e. a NOP should just be
+    // ignored during lifting.
+    // These pseudo outputs are used to simplify some algorithms, e.g. minimization,
+    // which needs to replace instructions with NOPs while keeping the variable numbers
+    // contiguous. They can also serve as placeholders for future instructions.
+    init(numOutputs: Int = 0) {
+        // We need an empty context here as .script is default and we want to be able to minimize in every context.
+        super.init(numOutputs: numOutputs, attributes: [.isNop])
+    }
+}
+
+
+// Expose the name of an operation as instance and class variable
+extension Operation {
+    var name: String {
+        return String(describing: type(of: self))
+    }
+
+    class var name: String {
+        return String(describing: self)
+    }
+}</code></pre></div>
+<p> </p>
+
+      </div>
+
+
+    <footer class="post-footer"><div class="pagination">
+    <div class="pagination-title">
+      <span class="pagination-title-h">Read other posts</span>
+      <hr />
+    </div>
+    <div class="buttons fill">
+        <a href="http://localhost:5689/posts/fuzzilli-ir-code-based-research/" class="button">
+          <span class="icon">&lArr;</span>
+          <span class="label">Fuzzilli IR Code Based Research Introduction</span>
+        </a>
+    </div>
+  </div>
+
+    </footer>
+  </article>
+        </main>
+        <footer class="site-footer">
+<p class="buildinfo">
+  <time datetime="2025-04-05 20:26:20 KST">Site built on: 2025-04-05 20:26:20 KST</time>
+</p>
+<div class="copyright">
+  <p></p>
+  <nav class="navbar">
+    <ul class="navbar__list">
+      <li><a href="http://localhost:5689/posts/index.xml">RSS</a></li>
+      <li><a href="http://localhost:5689/sitemap.xml">Sitemap</a></li>
+    </ul>
+  </nav>
+</div>
+<p class="themeinfo">Powered by <a href="https://gohugo.io">Hugo</a>, using theme <a href="https://manid2.github.io/hugo-xterm/">Hugo Xterm</a>.</p>
+</footer>
+      </div>
+    </div><script type="text/javascript" src="/bundle.js"></script>
+</body>
+</html>
